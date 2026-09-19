@@ -2,8 +2,11 @@ import { calculateImpact } from "./impact";
 import type { SessionTotals } from "./session";
 
 export const TEAM_YEAR_DAYS = 365;
-export const DEFAULT_TEAM_SIZE = 100;
-export const DEFAULT_REQUESTS_PER_PERSON_PER_DAY = 8;
+/** Enterprise-scale demo: 100k people × 50 work requests/day. */
+export const DEFAULT_TEAM_SIZE = 100_000;
+export const DEFAULT_REQUESTS_PER_PERSON_PER_DAY = 50;
+export const MAX_TEAM_SIZE = 500_000;
+export const MAX_REQUESTS_PER_PERSON_PER_DAY = 200;
 
 /** Demo turn: Flash Lite 1k/1k answer + light classifier — used when the session is empty. */
 const DEMO = calculateImpact(
@@ -65,8 +68,8 @@ export interface TeamYearProjection {
 }
 
 export function teamYearProjection(totals: SessionTotals, inputs: TeamYearInputs): TeamYearProjection {
-  const teamSize = Math.max(1, Math.min(10_000, Math.round(inputs.teamSize)));
-  const requestsPerPersonPerDay = Math.max(0, Math.min(200, inputs.requestsPerPersonPerDay));
+  const teamSize = Math.max(1, Math.min(MAX_TEAM_SIZE, Math.round(inputs.teamSize)));
+  const requestsPerPersonPerDay = Math.max(0, Math.min(MAX_REQUESTS_PER_PERSON_PER_DAY, inputs.requestsPerPersonPerDay));
   const days = inputs.days ?? TEAM_YEAR_DAYS;
   const annualRequests = teamSize * requestsPerPersonPerDay * days;
   const averages = perRequestAverages(totals);

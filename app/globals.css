@@ -151,7 +151,8 @@ h1 {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: var(--space-xl) 5% var(--space-xxl);
+  /* Extra bottom space so fixed Savings gauge never covers welcome controls */
+  padding: var(--space-xl) 5% max(var(--space-xxl), 148px);
 }
 .chat-welcome h1 { margin-bottom: 0; }
 .chat-welcome .hero-description { margin-left: auto; margin-right: auto; }
@@ -359,27 +360,40 @@ h1 {
 .composer-dock {
   position: sticky;
   bottom: 0;
-  padding: 8px 0 22px;
+  /* Bottom padding clears the fixed Savings gauge */
+  padding: 8px 0 148px;
   background: var(--canvas-parchment);
 }
-.composer-dock .composer, .dock-examples {
+.composer-dock .composer,
+.composer-dock .dock-examples {
   width: min(760px, 90%);
   margin-left: auto;
   margin-right: auto;
 }
 .dock-examples { margin-top: 10px; }
 
-/* Water + tree emoji strip — bottom-left of chat (gauge stays bottom-right) */
+/* Water + tree emoji strip — in-flow under example prompts (gauge stays bottom-right) */
 .session-savings-emojis {
-  position: fixed;
-  left: max(16px, calc((100vw - 980px) / 2 + 8px));
-  bottom: 20px;
-  z-index: 39;
-  max-width: min(280px, calc(100vw - 140px));
+  position: relative;
+  z-index: 1;
+  margin-top: 14px;
+  max-width: min(280px, calc(100% - 120px));
   padding: 10px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   background: var(--canvas);
+  box-sizing: border-box;
+}
+.welcome-composer .session-savings-emojis {
+  margin-left: 0;
+  margin-right: auto;
+}
+.composer-dock .session-savings-emojis {
+  /* Align with composer column left edge; leave room for fixed gauge */
+  width: min(280px, calc(90% - 120px));
+  max-width: min(280px, calc(90% - 120px));
+  margin-left: max(5%, calc((100% - 760px) / 2));
+  margin-right: auto;
 }
 .session-savings-emojis-empty {
   margin: 0;
@@ -493,12 +507,19 @@ h1 {
   text-align: center;
   max-width: 104px;
 }
-.chat-page.is-active { padding-bottom: 28px; }
+.chat-page.is-active { padding-bottom: 0; }
 @media (max-width: 760px) {
+  .chat-welcome {
+    padding-bottom: max(40px, 128px);
+  }
+  .composer-dock {
+    padding-bottom: 128px;
+  }
   .session-savings-emojis {
-    left: 12px;
-    bottom: 100px;
-    max-width: min(220px, calc(100vw - 110px));
+    max-width: min(220px, calc(100% - 100px));
+  }
+  .composer-dock .session-savings-emojis {
+    max-width: min(220px, calc(90% - 100px));
   }
   .session-savings-emoji-caption { display: none; }
   .savings-gauge {
@@ -513,7 +534,7 @@ h1 {
 
 .sim-controls {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 160px 1fr auto;
   gap: var(--space-lg);
   margin-top: var(--space-xl);
   padding-top: var(--space-lg);
@@ -522,6 +543,30 @@ h1 {
 }
 .sim-field { display: grid; gap: 8px; }
 .sim-field-wide { min-width: 0; }
+.sim-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 2px;
+}
+.sim-preset {
+  border: 1px solid var(--hairline);
+  background: var(--surface-pearl);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sim-preset:hover { border-color: var(--primary); color: var(--primary); }
+.sim-preset.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface-pearl));
+  color: var(--primary);
+}
 .sim-field-label {
   font-size: 12px;
   font-weight: 600;
@@ -580,6 +625,7 @@ h1 {
 }
 @media (max-width: 760px) {
   .sim-controls, .sim-results { grid-template-columns: 1fr; }
+  .sim-presets { padding-bottom: 0; }
 }
 
 .dashboard-page {
@@ -1067,7 +1113,7 @@ h1 {
   .brand { font-size: 19px; }
   .header-pill { display: none; }
   .chat-page { min-height: calc(100dvh - 52px); }
-  .chat-welcome { padding: 24px 6% 40px; }
+  .chat-welcome { padding: 24px 6% 128px; }
   .user-bubble { max-width: 90%; }
   .chat-toolbar { width: 88%; }
   .lifetime-grid { grid-template-columns: 1fr; gap: var(--space-md); }

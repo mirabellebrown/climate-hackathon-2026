@@ -131,6 +131,7 @@ export function ChatView() {
           <div className="welcome-composer">
             {composer}
             <div className="examples"><span>Try a prompt</span>{EXAMPLES.map((example) => <button key={example.label} type="button" disabled={loading} onClick={() => { setPrompt(example.prompt); textarea.current?.focus(); }}>{example.label}</button>)}</div>
+            <SessionSavingsEmojis />
           </div>
         </section>
       ) : (
@@ -155,10 +156,10 @@ export function ChatView() {
           <div className="composer-dock">
             {composer}
             <div className="examples dock-examples"><span>Try a prompt</span>{EXAMPLES.map((example) => <button key={example.label} type="button" disabled={loading} onClick={() => { setPrompt(example.prompt); textarea.current?.focus(); }}>{example.label}</button>)}</div>
+            <SessionSavingsEmojis />
           </div>
         </>
       )}
-      <SessionSavingsEmojis />
       <SavingsGauge />
     </main>
   </>;

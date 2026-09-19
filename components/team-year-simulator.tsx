@@ -5,6 +5,8 @@ import { money, number, percent } from "@/lib/format";
 import {
   DEFAULT_REQUESTS_PER_PERSON_PER_DAY,
   DEFAULT_TEAM_SIZE,
+  MAX_REQUESTS_PER_PERSON_PER_DAY,
+  MAX_TEAM_SIZE,
   TEAM_YEAR_DAYS,
   teamYearProjection,
 } from "@/lib/team-year-sim";
@@ -19,6 +21,8 @@ export function TeamYearSimulator() {
     requestsPerPersonPerDay: perDay,
     days: TEAM_YEAR_DAYS,
   });
+  const isEnterprisePreset =
+    teamSize === DEFAULT_TEAM_SIZE && perDay === DEFAULT_REQUESTS_PER_PERSON_PER_DAY;
   const source = projection.averages.fromSession
     ? `Averaged from ${projection.averages.sampleRequests} session ${projection.averages.sampleRequests === 1 ? "request" : "requests"} in this browser`
     : "Using a demo Flash Lite turn (1k/1k tokens + classifier) until the team chats";
@@ -29,7 +33,7 @@ export function TeamYearSimulator() {
         <p className="eyebrow">Simulation</p>
         <h2 id="team-year-title">Team-year cost projection</h2>
         <p>
-          What a team of ~{DEFAULT_TEAM_SIZE} might spend in a year if every request looked like this session’s
+          What a team of ~{teamSize.toLocaleString("en-US")} might spend in a year if every request looked like this session’s
           average (GreenRoute routed + classifier vs Always Gemini Pro). This is a <strong>projection</strong>, not measured org billing.
         </p>
       </div>
@@ -40,7 +44,7 @@ export function TeamYearSimulator() {
           <input
             type="number"
             min={1}
-            max={10000}
+            max={MAX_TEAM_SIZE}
             step={1}
             value={teamSize}
             onChange={(event) => setTeamSize(Number(event.target.value) || 1)}
@@ -54,13 +58,27 @@ export function TeamYearSimulator() {
           <input
             type="range"
             min={1}
-            max={40}
+            max={MAX_REQUESTS_PER_PERSON_PER_DAY}
             step={1}
             value={perDay}
             onChange={(event) => setPerDay(Number(event.target.value))}
             data-testid="sim-per-day"
           />
         </label>
+        <div className="sim-presets">
+          <button
+            type="button"
+            className={isEnterprisePreset ? "sim-preset active" : "sim-preset"}
+            data-testid="sim-preset-enterprise"
+            aria-pressed={isEnterprisePreset}
+            onClick={() => {
+              setTeamSize(DEFAULT_TEAM_SIZE);
+              setPerDay(DEFAULT_REQUESTS_PER_PERSON_PER_DAY);
+            }}
+          >
+            100k team · 50/day
+          </button>
+        </div>
       </div>
 
       <p className="sim-source" data-testid="sim-source">{source} · {TEAM_YEAR_DAYS} days · {number(projection.annualRequests)} annual requests</p>

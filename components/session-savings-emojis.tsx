@@ -12,7 +12,7 @@ function repeat(emoji: string, count: number) {
   ));
 }
 
-/** Compact water + tree strip along the chat bottom (gauge stays bottom-right). */
+/** Compact water + tree strip below example prompts (gauge stays bottom-right). */
 export function SessionSavingsEmojis() {
   const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot);
   const life = lifetimeSavings(session);
