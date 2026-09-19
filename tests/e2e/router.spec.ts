@@ -35,6 +35,10 @@ async function mock(page: Page, respond: (body: { prompt: string; sessionId?: st
   return bodies;
 }
 
+const model = (page: Page) => page.locator(".message-assistant .routing-result strong").last();
+const saving = (page: Page) => page.getByTestId("efficiency-savings");
+const sessionLine = (page: Page) => page.getByTestId("session-line");
+
 async function send(page: Page, text: string) {
   await page.getByRole("textbox", { name: "Your message" }).fill(text);
   await page.getByRole("textbox", { name: "Your message" }).press("Enter");
@@ -46,37 +50,36 @@ test("chats, continues the conversation, shows impact, and counts each run once"
   const bodies = await mock(page, (body) => reply(body.sessionId ? "medium" : "light"));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "What’s on your mind?" })).toBeVisible();
-  await expect(page.getByText("0 completed runs")).toBeVisible();
+  await expect(sessionLine(page)).toHaveText("Your savings add up here as you chat");
   await page.getByRole("button", { name: "Explain something" }).click();
   await expect(page.getByRole("textbox", { name: "Your message" })).toHaveValue(/leaves/);
   await page.getByRole("button", { name: "Send" }).click();
 
-  await expect(page.locator(".bubble-user")).toContainText("leaves change color");
+  await expect(page.locator(".user-bubble")).toContainText("leaves change color");
   await expect(page.locator(".answer-markdown strong")).toHaveText("chlorophyll breaks down");
-  await expect(page.getByText("Claude Haiku 4.5", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("savings-percent")).toHaveText("74.4%");
-  await expect(page.getByText("1 completed run", { exact: false })).toBeVisible();
+  await expect(model(page)).toHaveText("Claude Haiku 4.5");
+  await expect(saving(page)).toHaveText("74.4% less energy than Opus");
+  await expect(sessionLine(page)).toContainText("1 answer ·");
   expect(bodies[0]).not.toHaveProperty("sessionId");
 
   await send(page, "And in code?");
-  await expect(page.getByText("Claude Sonnet 5", { exact: true })).toBeVisible();
+  await expect(model(page)).toHaveText("Claude Sonnet 5");
   expect(bodies[1]).toEqual({ prompt: "And in code?", sessionId: SESSION });
-  await expect(page.getByTestId("savings-percent")).toHaveText("49.4%");
+  await expect(saving(page)).toHaveText("49.4% less energy than Opus");
   await page.waitForTimeout(5_500); // A poll returns both runs again.
-  await expect(page.getByText("2 completed runs")).toBeVisible();
+  await expect(sessionLine(page)).toContainText("2 answers ·");
 
-  // Selecting an earlier reply shows its impact.
-  await page.getByRole("button", { name: /74.4% less than Opus/ }).click();
-  await expect(page.getByTestId("savings-percent")).toHaveText("74.4%");
+  // Each reply keeps its own impact line.
+  await expect(page.locator(".turn-impact").first()).toContainText("74.4% less energy than Opus");
 
   const stored = await page.evaluate((key) => localStorage.getItem(key), SESSION_KEY);
   expect(stored).not.toContain("leaves");
   expect(stored).not.toContain("chlorophyll");
 
-  await page.getByRole("button", { name: "New chat" }).click();
+  await page.getByRole("button", { name: "New conversation" }).click();
   await expect(page.getByRole("heading", { name: "What’s on your mind?" })).toBeVisible();
   await send(page, "Fresh start");
-  await expect(page.locator(".bubble-user")).toHaveText("Fresh start");
+  await expect(page.locator(".user-bubble")).toHaveText("Fresh start");
   expect(bodies[2]).not.toHaveProperty("sessionId");
   expect(errors).toEqual([]);
 });
@@ -85,9 +88,9 @@ test("shows extra cost for heavy routing without claiming savings", async ({ pag
   await mock(page, () => reply("heavy"));
   await page.goto("/");
   await send(page, "Design a complex global architecture.");
-  await expect(page.getByText("Claude Opus 5", { exact: true })).toBeVisible();
-  await expect(page.getByText("more estimated impact than always using Opus")).toBeVisible();
-  await expect(page.getByTestId("savings-percent")).toHaveText("0.6%");
+  await expect(model(page)).toHaveText("Claude Opus 5");
+  await expect(saving(page)).toHaveText("0.6% more energy than Opus");
+  await expect(page.locator(".turn-impact")).toContainText("more energy than Opus");
 });
 
 test("shows a failure, allows retry, and does not count the failure", async ({ page }) => {
@@ -98,11 +101,11 @@ test("shows a failure, allows retry, and does not count the failure", async ({ p
   await page.goto("/");
   await send(page, "Explain why leaves change color.");
   await expect(page.getByRole("alert").filter({ hasText: "isn't signed in" })).toBeVisible();
-  await expect(page.getByText("0 completed runs")).toBeVisible();
+  await expect(sessionLine(page)).toHaveText("Your savings add up here as you chat");
   await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByText("Claude Haiku 4.5", { exact: true })).toBeVisible();
-  await expect(page.locator(".bubble-user")).toHaveCount(1);
-  await expect(page.getByText("1 completed run", { exact: false })).toBeVisible();
+  await expect(model(page)).toHaveText("Claude Haiku 4.5");
+  await expect(page.locator(".user-bubble")).toHaveCount(1);
+  await expect(sessionLine(page)).toContainText("1 answer ·");
 });
 
 test("locks input while waiting and supports Shift+Enter for new lines", async ({ page }) => {
@@ -121,7 +124,7 @@ test("locks input while waiting and supports Shift+Enter for new lines", async (
   await expect(box).toBeDisabled();
   await expect(page.getByText("Choosing a model and asking Claude Code…")).toBeVisible();
   release();
-  await expect(page.getByText("Claude Haiku 4.5", { exact: true })).toBeVisible();
+  await expect(model(page)).toHaveText("Claude Haiku 4.5");
   expect(requests).toBe(1);
 });
 
@@ -133,28 +136,26 @@ test("renders Markdown safely", async ({ page }) => {
   await expect(page.locator(".answer-markdown script")).toHaveCount(0);
 });
 
-test("works on mobile, explains the assumptions, and does not overflow", async ({ page }) => {
+test("works on mobile and does not overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mock(page, () => reply("medium"));
   await page.goto("/");
   await send(page, "Hello");
-  await expect(page.getByText("Claude Sonnet 5", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "The methodology" }).click();
-  await expect(page.getByRole("heading", { name: "Tokens in. Estimates out." })).toBeVisible();
+  await expect(model(page)).toHaveText("Claude Sonnet 5");
+  await expect(page.getByRole("link", { name: "Impact", exact: true })).toHaveAttribute("href", "/reports/esg");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/mobile-chat.png", fullPage: true });
 });
 
-test("storage failures keep the chat usable and disclose non-persistence", async ({ page }) => {
+test("storage failures keep the chat usable", async ({ page }) => {
   await page.addInitScript(() => {
     Storage.prototype.setItem = () => { throw new DOMException("Storage blocked", "QuotaExceededError"); };
   });
   await mock(page, () => reply("light"));
   await page.goto("/");
   await send(page, "Hello");
-  await expect(page.getByText("Claude Haiku 4.5", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Browser storage is unavailable/)).toBeVisible();
-  await expect(page.getByText("1 completed run", { exact: false })).toBeVisible();
+  await expect(model(page)).toHaveText("Claude Haiku 4.5");
+  await expect(sessionLine(page)).toContainText("1 answer ·");
 });
 
 test("real HTTP endpoints validate input, need only Gemini, and stay local", async ({ request }) => {

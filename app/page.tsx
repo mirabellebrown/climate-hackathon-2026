@@ -1,46 +1,67 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Check, CircleAlert, Copy, GitBranch, Leaf, LoaderCircle, Plus, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, Copy, GitBranch, Leaf, LoaderCircle, Plus, RotateCcw, Scale } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ImpactPanel } from "@/components/impact-panel";
-import { Methodology } from "@/components/methodology";
-import { SessionPanel } from "@/components/session-panel";
 import { MAX_PROMPT_LENGTH } from "@/lib/config";
 import { number, percent, tokens } from "@/lib/format";
-import { recordResults } from "@/lib/session";
+import { getServerSessionSnapshot, getSessionSnapshot, recordResults, subscribeSession } from "@/lib/session";
 import type { ChatReply, DashboardState, RouteError, RouteResult } from "@/lib/types";
 
-const POLL_MS = 5_000;
+// GreenRoute chat UI (from feat/claude-api-router), backed by Canopy's routing and the
+// user's own Claude Code running in the background with tools off.
+
 const EXAMPLES = [
   { label: "Explain something", prompt: "Explain why leaves change color in autumn in three simple sentences." },
   { label: "Solve a coding problem", prompt: "Write a TypeScript function that groups an array of objects by a given key. Explain its time complexity and handle missing keys." },
   { label: "Think through a system", prompt: "Design a fault-tolerant architecture for a global carbon accounting platform. Compare consistency, regional failover, and auditability tradeoffs under conflicting data updates." },
 ];
 
-type Message =
-  | { id: string; role: "user"; text: string }
-  | { id: string; role: "assistant"; text: string; result: RouteResult }
-  | { id: string; role: "error"; error: RouteError["error"]; prompt: string };
-
+type Turn = { id: string; prompt: string; reply?: { answer: string; result: RouteResult }; error?: RouteError["error"] };
 let nextId = 0;
-const uid = () => `m${++nextId}`;
+const uid = () => `t${++nextId}`;
+
+function SiteHeader() {
+  return <header className="site-header">
+    <Link className="brand" href="/" aria-label="GreenRoute home"><span className="brand-symbol"><Leaf size={22} strokeWidth={1.7} /></span>GreenRoute</Link>
+    <div className="header-actions">
+      <span className="header-pill"><span />Carbon-aware AI</span>
+      <Link className="impact-toggle" href="/reports/esg"><Scale size={15} />Impact</Link>
+    </div>
+  </header>;
+}
+
+function EfficiencyStrip({ result, loading }: { result: RouteResult | null; loading: boolean }) {
+  if (loading) return <div id="efficiency-strip" className="efficiency-strip" aria-live="polite"><LoaderCircle className="spin" size={14} /><span>Choosing a lighter Claude…</span></div>;
+  if (!result) return <div id="efficiency-strip" className="efficiency-strip"><Leaf size={14} /><span>Smallest suitable Claude · compared with always using Opus after you send</span></div>;
+  const extra = result.impact.savings.energyWh < 0;
+  return <div id="efficiency-strip" className="efficiency-strip" aria-label="This turn’s efficiency">
+    <span className={`tier-badge tier-${result.routing.tier}`}><span />{result.routing.modelName}</span>
+    <span data-testid="efficiency-savings">{result.impact.savings.percent === null ? "No energy comparison" : `${percent(result.impact.savings.percent)} ${extra ? "more" : "less"} energy than Opus`}</span>
+    <span>{number(result.impact.routed.energyWh)} Wh · {number(result.impact.routed.co2eGrams)} g CO₂e</span>
+    <span>{tokens(result.usage.generation.inputTokens + result.usage.generation.outputTokens)} tokens</span>
+  </div>;
+}
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const inFlight = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const bottom = useRef<HTMLDivElement>(null);
+  const threadEnd = useRef<HTMLDivElement>(null);
+  const inFlight = useRef(false);
+  const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot);
+  const latest = turns.findLast((turn) => turn.reply)?.reply?.result ?? null;
+  const empty = turns.length === 0 && !pending;
+  const canSubmit = prompt.trim().length > 0 && prompt.length <= MAX_PROMPT_LENGTH && !loading;
 
-  // Totals also include runs started from the terminal launcher; dedupe is by routing ID.
+  // Totals also count runs started from the terminal launcher; dedupe is by routing ID.
   useEffect(() => {
     let active = true;
     async function poll() {
@@ -54,122 +75,124 @@ export default function Home() {
       } catch { /* the chat reports its own errors */ }
     }
     poll();
-    const timer = setInterval(poll, POLL_MS);
+    const timer = setInterval(poll, 5_000);
     return () => { active = false; clearInterval(timer); };
   }, []);
 
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [messages, loading]);
+  useEffect(() => {
+    const node = textarea.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${Math.min(node.scrollHeight, 200)}px`;
+  }, [prompt, empty]);
 
-  const replies = messages.filter((message): message is Extract<Message, { role: "assistant" }> => message.role === "assistant");
-  const selected = replies.find((message) => message.id === selectedId) ?? replies.at(-1) ?? null;
-  const canSend = prompt.trim().length > 0 && prompt.length <= MAX_PROMPT_LENGTH && !loading;
+  useEffect(() => { if (!empty) threadEnd.current?.scrollIntoView({ block: "end" }); }, [empty, turns.length, pending]);
 
   async function send(text: string) {
-    if (!text.trim() || inFlight.current) return;
+    const next = text.trim();
+    if (!next || next.length > MAX_PROMPT_LENGTH || inFlight.current) return;
     inFlight.current = true;
     setLoading(true);
-    setSelectedId(null);
-    setMessages((current) => [...current.filter((message) => message.role !== "error"), { id: uid(), role: "user", text }]);
+    setPending(next);
     setPrompt("");
     try {
-      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sessionId ? { prompt: text, sessionId } : { prompt: text }) });
+      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sessionId ? { prompt: next, sessionId } : { prompt: next }) });
       const data: ChatReply | RouteError = await response.json();
       if (!response.ok || "error" in data) {
         const error = "error" in data ? data.error : { code: "REQUEST_FAILED", message: "The request could not be completed. Please try again.", stage: "request" as const };
-        setMessages((current) => [...current, { id: uid(), role: "error", error, prompt: text }]);
+        setTurns((current) => [...current, { id: uid(), prompt: next, error }]);
       } else {
         if (data.sessionId) setSessionId(data.sessionId);
         recordResults([data.result]);
-        setMessages((current) => [...current, { id: uid(), role: "assistant", text: data.answer, result: data.result }]);
+        setTurns((current) => [...current, { id: uid(), prompt: next, reply: { answer: data.answer, result: data.result } }]);
       }
     } catch {
-      setMessages((current) => [...current, { id: uid(), role: "error", error: { code: "NETWORK_ERROR", message: "We couldn’t reach the local server. Is it still running?", stage: "request" }, prompt: text }]);
-    } finally { setLoading(false); inFlight.current = false; textarea.current?.focus(); }
+      setTurns((current) => [...current, { id: uid(), prompt: next, error: { code: "NETWORK_ERROR", message: "We couldn’t reach the local server. Is it still running?", stage: "request" } }]);
+    } finally {
+      setPending(null);
+      setLoading(false);
+      inFlight.current = false;
+      textarea.current?.focus();
+    }
   }
 
-  function submit(event: FormEvent) { event.preventDefault(); if (canSend) send(prompt); }
-
-  function retry(message: Extract<Message, { role: "error" }>) {
-    // Drop the failed exchange, then resend the same prompt.
-    setMessages((current) => current.slice(0, Math.max(0, current.indexOf(message) - 1)));
-    send(message.prompt);
+  function submit(event: FormEvent) { event.preventDefault(); if (canSubmit) send(prompt); }
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+  }
+  function retry(turn: Turn) { setTurns((current) => current.filter((t) => t.id !== turn.id)); send(turn.prompt); }
+  function newConversation() { setTurns([]); setSessionId(null); setPrompt(""); textarea.current?.focus(); }
+  async function copy(turn: Turn) {
+    try { await navigator.clipboard.writeText(turn.reply!.answer); setCopiedId(turn.id); } catch { setCopiedId(null); }
   }
 
-  function newChat() { setMessages([]); setSessionId(null); setSelectedId(null); setPrompt(""); textarea.current?.focus(); }
+  const sessionSaved = session.baselineWh ? (session.baselineWh - session.routedWh) / session.baselineWh * 100 : null;
+  const sessionLine = session.requests
+    ? `${session.requests} ${session.requests === 1 ? "answer" : "answers"} · ${percent(sessionSaved)} ${session.routedWh > session.baselineWh ? "more" : "less"} energy than always using Opus`
+    : "Your savings add up here as you chat";
 
-  async function copy(message: Extract<Message, { role: "assistant" }>) {
-    try { await navigator.clipboard.writeText(message.text); setCopiedId(message.id); } catch { setCopiedId(null); }
-  }
+  const examples = (className: string) => <div className={className}><span>Try a prompt</span>{EXAMPLES.map((example) => <button key={example.label} type="button" disabled={loading} onClick={() => { setPrompt(example.prompt); textarea.current?.focus(); }}>{example.label}</button>)}</div>;
 
-  function openMethodology() {
-    const details = document.getElementById("methodology") as HTMLDetailsElement | null;
-    if (details) { details.open = true; details.scrollIntoView({ behavior: "smooth", block: "start" }); }
-  }
+  const composer = <form className="composer" onSubmit={submit}>
+    <label className="sr-only" htmlFor="prompt">Your message</label>
+    <textarea id="prompt" ref={textarea} value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={loading} maxLength={MAX_PROMPT_LENGTH}
+      placeholder={sessionId ? "Ask a follow-up…" : "Ask anything…"} aria-describedby="prompt-hint efficiency-strip" rows={1} onKeyDown={onKeyDown} />
+    <EfficiencyStrip result={latest} loading={loading} />
+    <div className="composer-footer">
+      <span id="prompt-hint">{prompt.length ? `${tokens(prompt.length)} / ${tokens(MAX_PROMPT_LENGTH)}` : "Enter to send · Shift+Enter for a new line"}</span>
+      <button className="submit-button" type="submit" disabled={!canSubmit}>{loading ? <><LoaderCircle className="spin" size={16} />Thinking…</> : <>Send <ArrowRight size={16} /></>}</button>
+    </div>
+  </form>;
 
   return <>
-    <a className="skip-link" href="#prompt">Skip to message box</a>
-    <header className="site-header">
-      <Link className="brand" href="/" aria-label="Canopy home"><span className="brand-symbol"><Leaf size={25} strokeWidth={1.7} /></span>canopy<span className="brand-period">.</span></Link>
-      <nav aria-label="Main navigation"><button onClick={openMethodology}>The methodology <ArrowUpRight size={14} /></button><span className="header-pill"><span />Carbon-aware Claude</span></nav>
-    </header>
-
-    <main className="page-shell">
-      <section className="hero hero-compact" aria-labelledby="hero-title">
-        <div><p className="eyebrow hero-eyebrow"><span /> LESS IS A LITTLE MORE.</p><h1 id="hero-title">The right Claude. <em>A lighter footprint.</em></h1><p className="hero-description">Chat as usual. Each message is routed to the smallest suitable Claude model and answered by your own Claude Code, running quietly in the background.</p></div>
-      </section>
-
-      <div className="workspace-grid">
-        <section className="chat-panel" aria-labelledby="chat-title">
-          <div className="panel-heading">
-            <h2 id="chat-title"><Sparkles size={16} strokeWidth={1.5} /> Conversation</h2>
-            <button className="copy-button" onClick={newChat} disabled={loading || (!messages.length && !sessionId)}><Plus size={15} />New chat</button>
-          </div>
-          {configured === false && <p className="fallback-note chat-setup">Add GEMINI_API_KEY to .env.local, then restart the app.</p>}
-
-          <div className="chat-log" aria-live="polite" aria-busy={loading}>
-            {!messages.length && !loading && <div className="answer-waiting chat-empty">
-              <h3>What’s on your mind?</h3>
-              <p>A quick question, a tricky problem, a spark of an idea.<br />Claude Code answers with its tools switched off.</p>
-              <div className="examples">{EXAMPLES.map((example) => <button key={example.label} onClick={() => { setPrompt(example.prompt); textarea.current?.focus(); }}>{example.label}<ArrowUpRight size={12} /></button>)}</div>
+    <a className="skip-link" href="#prompt">Skip to prompt</a>
+    <SiteHeader />
+    <main className={`chat-page ${empty ? "is-empty" : "is-active"}`}>
+      {empty ? <section className="chat-welcome" aria-labelledby="welcome-title">
+        <p className="eyebrow hero-eyebrow"><span /> LESS IS A LITTLE MORE.</p>
+        <h1 id="welcome-title">What’s on your mind?</h1>
+        <p className="hero-description">Ask anything for your team. We’ll pick Haiku, Sonnet, or Opus and answer with your own Claude Code. Efficiency sits above Send; Impact opens the ESG report.</p>
+        <div className="welcome-composer">
+          {configured === false && <p className="fallback-note">Add GEMINI_API_KEY to .env.local, then restart the app.</p>}
+          {composer}
+          {examples("examples")}
+          <p className="session-line" data-testid="session-line">{sessionLine}</p>
+        </div>
+      </section> : <>
+        <div className="chat-toolbar">
+          <p>Team chat · each prompt is routed on its own, in one continuing conversation</p>
+          <button type="button" className="new-chat-button" onClick={newConversation} disabled={loading}><Plus size={14} />New conversation</button>
+        </div>
+        <div className="chat-thread" role="log" aria-live="polite" aria-relevant="additions">
+          {turns.map((turn) => <article key={turn.id} className="turn">
+            <div className="message-user"><div className="user-bubble"><p>{turn.prompt}</p></div></div>
+            {turn.reply && <div className="message-assistant">
+              <div className="routing-result">
+                <span className={`tier-badge tier-${turn.reply.result.routing.tier}`}><span />{turn.reply.result.routing.tier}</span>
+                <strong>{turn.reply.result.routing.modelName}</strong>
+                <Link className="see-impact" href="/reports/esg">See impact</Link>
+                <button className="copy-button" onClick={() => copy(turn)} aria-label="Copy answer">{copiedId === turn.id ? <Check size={15} /> : <Copy size={15} />}{copiedId === turn.id ? "Copied" : "Copy"}</button>
+              </div>
+              <p className="routing-reason"><GitBranch size={14} />{turn.reply.result.routing.reason}</p>
+              {turn.reply.result.routing.classifierFallback && <p className="fallback-note">Classified with the fallback Gemini model because the primary classifier was unavailable.</p>}
+              {turn.reply.result.modelMismatch && <p className="fallback-note">Claude Code reported {turn.reply.result.usage.models.map((model) => model.model).join(", ")}. The estimate uses those models.</p>}
+              <div className="answer-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={{ a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a> }}>{turn.reply.answer}</ReactMarkdown></div>
+              <p className="turn-impact">{number(turn.reply.result.impact.routed.energyWh)} Wh · {percent(turn.reply.result.impact.savings.percent)} {turn.reply.result.impact.savings.energyWh < 0 ? "more" : "less"} energy than Opus · {tokens(turn.reply.result.usage.generation.inputTokens + turn.reply.result.usage.generation.outputTokens)} tokens</p>
             </div>}
-
-            {messages.map((message) => message.role === "user"
-              ? <div key={message.id} className="bubble bubble-user"><p>{message.text}</p></div>
-              : message.role === "error"
-                ? <div key={message.id} className="error-message" role="alert"><CircleAlert size={22} /><div><h3>We hit a small snag.</h3><p>{message.error.message}</p><small>{message.error.stage === "generation" ? "Classification completed, but Claude Code didn’t finish. This attempt is not included in totals." : "Nothing was added to your totals."}</small><button className="retry-button" onClick={() => retry(message)} disabled={loading}><RotateCcw size={13} />Try again</button></div></div>
-                : <article key={message.id} className={`bubble bubble-assistant ${selected?.id === message.id ? "bubble-selected" : ""}`}>
-                  <div className="routing-result"><span className={`tier-badge tier-${message.result.routing.tier}`}><span />{message.result.routing.tier}</span><strong>{message.result.routing.modelName}</strong></div>
-                  <p className="routing-reason"><GitBranch size={14} />{message.result.routing.reason}</p>
-                  {message.result.routing.classifierFallback && <p className="fallback-note">Classified with the fallback Gemini model because the primary classifier was unavailable.</p>}
-                  {message.result.modelMismatch && <p className="fallback-note">Claude Code reported {message.result.usage.models.map((model) => model.model).join(", ")}. The estimate uses those models.</p>}
-                  <div className="answer-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={{ a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a> }}>{message.text}</ReactMarkdown></div>
-                  <div className="answer-meta">
-                    <button className="meta-button" onClick={() => setSelectedId(message.id)} aria-pressed={selected?.id === message.id}>{number(message.result.impact.routed.energyWh)} Wh · {percent(message.result.impact.savings.percent)} {message.result.impact.savings.energyWh < 0 ? "more" : "less"} than Opus</button>
-                    <span>{tokens(message.result.usage.generation.inputTokens + message.result.usage.generation.outputTokens)} tokens</span>
-                    <button className="meta-button" onClick={() => copy(message)} aria-label="Copy answer">{copiedId === message.id ? <Check size={12} /> : <Copy size={12} />}{copiedId === message.id ? "Copied" : "Copy"}</button>
-                  </div>
-                </article>)}
-
-            {loading && <div className="bubble bubble-assistant bubble-loading" role="status"><LoaderCircle className="spin" size={16} />Choosing a model and asking Claude Code…</div>}
-            <div ref={bottom} />
-          </div>
-
-          <form className="composer" onSubmit={submit}>
-            <label className="sr-only" htmlFor="prompt">Your message</label>
-            <textarea id="prompt" ref={textarea} value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={loading} maxLength={MAX_PROMPT_LENGTH} rows={3}
-              placeholder={sessionId ? "Ask a follow-up…" : "Ask anything…"}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-            <div className="composer-footer"><span>Enter to send · Shift+Enter for a new line</span><button className="submit-button" type="submit" disabled={!canSend}>{loading ? <><LoaderCircle className="spin" size={16} />Thinking…</> : <>Send <ArrowRight size={17} /></>}</button></div>
-          </form>
-          <p className="setup-note">Prefer the terminal? <code>npm run ask -- &quot;…&quot;</code> runs the same router, and those runs count here too.</p>
-        </section>
-
-        <ImpactPanel result={selected?.result ?? null} loading={loading && !selected} />
-      </div>
-
-      <SessionPanel disabled={loading} />
-      <Methodology />
-      <footer className="site-footer"><p><Leaf size={14} />Thoughtful AI. A little less impact.</p><p>Estimates, not measurements. <a href="https://arxiv.org/abs/2505.09598" target="_blank" rel="noreferrer">Research</a><span>·</span><a href="https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references" target="_blank" rel="noreferrer">EPA factors</a></p></footer>
+            {turn.error && <div className="error-message" role="alert"><CircleAlert size={22} /><div><h3>We hit a small snag.</h3><p>{turn.error.message}</p><small>{turn.error.stage === "generation" ? "Classification completed, but Claude Code didn’t finish. This attempt is not included in totals." : "Nothing was added to your totals."}</small><button className="new-chat-button retry-button" onClick={() => retry(turn)} disabled={loading}><RotateCcw size={13} />Try again</button></div></div>}
+          </article>)}
+          {pending && <article className="turn">
+            <div className="message-user"><div className="user-bubble"><p>{pending}</p></div></div>
+            <div className="thinking-row" role="status"><div className="loading-orbit"><Leaf size={18} /></div><div><h3>A little thought goes into this.</h3><p>Choosing a model and asking Claude Code…</p></div></div>
+          </article>}
+          <div ref={threadEnd} />
+        </div>
+        <div className="composer-dock">
+          {composer}
+          {examples("examples dock-examples")}
+          <p className="session-line" data-testid="session-line">{sessionLine}</p>
+        </div>
+      </>}
     </main>
   </>;
 }
