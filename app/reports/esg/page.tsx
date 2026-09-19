@@ -167,7 +167,6 @@ export default function EsgReportPage() {
         <h1>AI Environmental Reporting</h1>
         <p>ISO/IEC TR 20226 metrics mapped to your ESG disclosures.</p>
       </div>
-      {s?.sample && <div className="esg-sample" role="note"><AlertTriangle size={16} /><span><strong>Sample data.</strong> These are illustrative records so you can explore the report. They are not EcoLogits output and not your organization’s figures. Real figures appear once your EcoLogits integration posts records to <code>/api/v1/esg/records</code>.</span></div>}
 
       <div className="esg-context" role="group" aria-label="Report filters">
         <label>Period<select value={query.period} onChange={(e) => setQuery((q) => ({ ...q, period: e.target.value }))}>

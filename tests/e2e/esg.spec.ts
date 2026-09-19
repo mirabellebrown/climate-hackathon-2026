@@ -15,7 +15,6 @@ async function open(page: Page) {
 test("headline totals are never shown without the exclusions, tier and classification in view", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await open(page);
-  await expect(page.getByText("Sample data.")).toBeVisible();
   const strip = page.getByLabel("What these figures do not include");
   for (const ex of exclusions.exclusions) await expect(strip).toContainText(ex.title);
   await expect(strip).toContainText("Scope 3 Category 1 (Purchased Goods and Services), location-based");
