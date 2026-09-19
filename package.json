@@ -15,8 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build",
-    "ask": "node cli/canopy.mjs"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@google/genai": "2.23.0",
@@ -39,8 +38,5 @@
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vitest": "5.0.1"
-  },
-  "bin": {
-    "canopy": "cli/canopy.mjs"
   }
 }

@@ -12,7 +12,7 @@ export default defineConfig({
     command: "npm run build && npm run start -- --port 3100",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: false,
-    env: { NEXT_TELEMETRY_DISABLED: "1", GEMINI_API_KEY: "", ANTHROPIC_API_KEY: "" },
+    env: { NEXT_TELEMETRY_DISABLED: "1", GEMINI_API_KEY: "" },
     timeout: 120_000,
   },
 });

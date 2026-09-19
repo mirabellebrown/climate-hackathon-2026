@@ -1,8 +1,9 @@
 import { classify } from "@/lib/classify";
 import { BASELINE_MODEL, MODELS } from "@/lib/config";
+import { estimateImpact } from "@/lib/ecologits";
 import { RouteFailure } from "@/lib/errors";
 import { generate } from "@/lib/generate";
-import { calculateImpact } from "@/lib/impact";
+import { compareUsage } from "@/lib/impact";
 import { readPrompt, requireKeys } from "@/lib/request";
 import type { RouteError, RouteResult } from "@/lib/types";
 
@@ -14,9 +15,13 @@ const headers = { "Cache-Control": "no-store" };
 export async function POST(request: Request): Promise<Response> {
   try {
     const prompt = await readPrompt(request);
-    requireKeys(["GEMINI_API_KEY", "ANTHROPIC_API_KEY"]);
+    requireKeys(["GEMINI_API_KEY"]);
+    const classifiedAt = Date.now();
     const classification = await classify(prompt);
+    const classifierLatencySeconds = (Date.now() - classifiedAt) / 1000;
+    const generatedAt = Date.now();
     const generation = await generate(prompt, classification.tier);
+    const generationLatencySeconds = (Date.now() - generatedAt) / 1000;
     const result: RouteResult = {
       answer: generation.answer,
       routing: {
@@ -25,14 +30,16 @@ export async function POST(request: Request): Promise<Response> {
         classifierModel: classification.model, classifierFallback: classification.usedFallback,
         baselineModel: BASELINE_MODEL.id,
       },
-      usage: {
-        classifier: classification.usage, generation: generation.usage,
-        total: {
-          inputTokens: classification.usage.inputTokens + generation.usage.inputTokens,
-          outputTokens: classification.usage.outputTokens + generation.usage.outputTokens,
-        },
-      },
-      impact: calculateImpact(classification.tier, generation.usage, classification.usage),
+      usage: compareUsage(generation.usage, classification.usage),
+      impact: await estimateImpact({
+        tier: classification.tier,
+        generationModel: MODELS[classification.tier].id,
+        classifierModel: classification.model,
+        generationUsage: generation.usage,
+        classifierUsage: classification.usage,
+        generationLatencySeconds,
+        classifierLatencySeconds,
+      }),
       truncated: generation.truncated,
     };
     return Response.json(result, { headers });

@@ -9,8 +9,7 @@ export const runtime = "nodejs";
 export const maxDuration = 70;
 const headers = { "Cache-Control": "no-store" };
 
-// Companion integrations choose a model here, then generate inside the user's
-// own Claude application. No Anthropic credential or generation call is needed.
+// Classify-only endpoint: pick a model without spending a generation call.
 export async function POST(request: Request): Promise<Response> {
   try {
     const prompt = await readPrompt(request);

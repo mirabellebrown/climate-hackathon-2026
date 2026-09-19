@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { RouteFailure } from "./errors";
 import { calculateObservedImpact, totalModelTokens } from "./impact";
-import type { Activity, ModelUsage, RouteResult, RoutingDecision } from "./types";
+import type { Activity, ModelUsage, ObservedRouteResult, RoutingDecision } from "./types";
 
 type Entry = { decision: RoutingDecision; activity: Activity };
 const root = globalThis as typeof globalThis & { canopyActivities?: Map<string, Entry> };
@@ -23,14 +23,14 @@ export function createDecision(data: Omit<RoutingDecision, "id" | "createdAt">):
 
 export function listActivities(): Activity[] { return [...entries.values()].map((entry) => entry.activity).reverse().slice(0, 100); }
 
-export function finishRun(id: string, models: ModelUsage[], durationMs: number): RouteResult {
+export function finishRun(id: string, models: ModelUsage[], durationMs: number): ObservedRouteResult {
   const entry = entries.get(id);
   if (!entry) throw new RouteFailure("UNKNOWN_REQUEST", "This routing decision is no longer available. The local server may have restarted.", 404, "request");
   if (entry.activity.result) return entry.activity.result;
   if (entry.activity.status === "failed") throw new RouteFailure("REQUEST_FINISHED", "This request has already been marked as failed.", 409, "request");
   const generation = totalModelTokens(models);
   const classifier = entry.decision.usage.classifier;
-  const result: RouteResult = {
+  const result: ObservedRouteResult = {
     id, createdAt: entry.decision.createdAt, completedAt: new Date().toISOString(), routing: entry.decision.routing,
     usage: { classifier, generation, models, total: { inputTokens: generation.inputTokens + classifier.inputTokens, outputTokens: generation.outputTokens + classifier.outputTokens } },
     impact: calculateObservedImpact(models, classifier), durationMs,
@@ -43,6 +43,6 @@ export function finishRun(id: string, models: ModelUsage[], durationMs: number):
 export function failRun(id: string): Activity {
   const entry = entries.get(id);
   if (!entry) throw new RouteFailure("UNKNOWN_REQUEST", "This routing decision is no longer available.", 404, "request");
-  if (entry.activity.status === "routed") entry.activity = { ...entry.activity, status: "failed", error: "Claude Code did not complete this run. See the terminal for details. Partial usage is not included in savings." };
+  if (entry.activity.status === "routed") entry.activity = { ...entry.activity, status: "failed", error: "This run did not complete. Partial usage is not included in savings." };
   return entry.activity;
 }

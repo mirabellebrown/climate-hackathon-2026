@@ -14,12 +14,23 @@ export interface Footprint {
   treeMinutes: number;
 }
 
+export interface CostBreakdown {
+  generation: number;
+  classifier: number;
+  routed: number;
+  baseline: number;
+  savings: number;
+  percent: number | null;
+}
+
 export interface Impact {
   generation: Footprint;
   classifier: Footprint;
   routed: Footprint;
   baseline: Footprint;
   savings: Footprint & { percent: number | null };
+  cost: CostBreakdown;
+  environmentalSource: "ecologits" | "fallback";
   methodologyVersion: string;
 }
 
@@ -56,7 +67,24 @@ export interface RoutingDecision {
   methodologyVersion: string;
 }
 
+export interface RouteUsage {
+  classifier: TokenUsage;
+  /** Measured tokens from the Gemini model that actually answered. */
+  generation: TokenUsage;
+  /** Counterfactual Gemini Pro tokens for the same prompt. No second API call: same counts as generation. */
+  baseline: TokenUsage;
+  total: TokenUsage;
+}
+
 export interface RouteResult {
+  answer: string;
+  routing: Routing;
+  usage: RouteUsage;
+  impact: Impact;
+  truncated: boolean;
+}
+
+export interface ObservedRouteResult {
   id: string;
   createdAt: string;
   completedAt: string;
@@ -72,7 +100,7 @@ export interface Activity {
   createdAt: string;
   routing: Routing;
   status: "routed" | "completed" | "failed";
-  result?: RouteResult;
+  result?: ObservedRouteResult;
   error?: string;
 }
 

@@ -15,9 +15,13 @@ export function providerStatus(error: unknown): number | undefined {
   return undefined;
 }
 
-export function providerFailure(error: unknown, provider: "Gemini" | "Claude", model: string): RouteFailure {
+export function providerFailure(
+  error: unknown,
+  provider: "Gemini",
+  model: string,
+  stage: RouteError["error"]["stage"],
+): RouteFailure {
   if (error instanceof RouteFailure) return error;
-  const stage = provider === "Gemini" ? "classification" : "generation";
   const status = providerStatus(error);
   if (status === 401 || status === 403) {
     return new RouteFailure("PROVIDER_AUTH", `${provider} could not authorize this request. Check the server API key and model access.`, 502, stage);
