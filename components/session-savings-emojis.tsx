@@ -12,7 +12,7 @@ function repeat(emoji: string, count: number) {
   ));
 }
 
-/** Compact water + tree strip below example prompts (gauge stays bottom-right). */
+/** Compact water + tree strip below example prompts (in document flow with gauge). */
 export function SessionSavingsEmojis() {
   const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot);
   const life = lifetimeSavings(session);
@@ -24,15 +24,15 @@ export function SessionSavingsEmojis() {
     <aside className="session-savings-emojis" aria-label="Water and tree savings" data-testid="session-savings-emojis">
       {empty ? (
         <p className="session-savings-emojis-empty" data-testid="session-savings-emojis-empty">
-          🧴🌳 grow here as you save water and trees vs Always Pro
+          💧🌳 grow here as you save water and trees vs Always Pro
         </p>
       ) : (
         <>
-          <div className="session-savings-emoji-row" data-testid="savings-bottles">
+          <div className="session-savings-emoji-row" data-testid="savings-droplets">
             <span className="session-savings-emoji-label">Water</span>
             <span className="session-savings-emoji-icons">
-              {repeat("🧴", icons.bottles)}
-              {icons.capped.bottles ? <span className="savings-more">+</span> : null}
+              {repeat("💧", icons.droplets)}
+              {icons.capped.droplets ? <span className="savings-more">+</span> : null}
             </span>
             <span className="session-savings-emoji-meta">{number(Math.abs(icons.waterLiters) * 1000)} mL</span>
           </div>
@@ -45,7 +45,7 @@ export function SessionSavingsEmojis() {
             <span className="session-savings-emoji-meta">{number(icons.treeMinutes)} min</span>
           </div>
           <p className="session-savings-emoji-caption" data-testid="session-savings-emoji-caption">
-            1 🧴 = {SAVINGS_EMOJI_SCALE.bottleLiters * 1000} mL · 1 🌳 = {SAVINGS_EMOJI_SCALE.treeMinutes} tree-min
+            1 💧 = {SAVINGS_EMOJI_SCALE.dropletLiters * 1000} mL · 1 🌳 = {SAVINGS_EMOJI_SCALE.treeMinutes} tree-min
             (EPA {number(treeKg)} kg CO₂/yr)
           </p>
         </>

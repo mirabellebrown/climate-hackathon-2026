@@ -3,8 +3,8 @@ import type { LifetimeSavings } from "./session";
 
 /** Chat-footer emoji scales (tiny EcoLogits totals need fine units). */
 export const SAVINGS_EMOJI_SCALE = {
-  /** One 🧴 ≈ this much water saved. */
-  bottleLiters: 0.001, // 1 mL
+  /** One 💧 ≈ this much water saved. */
+  dropletLiters: 0.001, // 1 mL
   /** One 🌳 ≈ this many tree-minutes of EPA uptake. */
   treeMinutes: 1,
   maxIcons: 10,
@@ -22,26 +22,26 @@ function iconCount(amount: number, unit: number, max: number): { count: number; 
 }
 
 export interface SavingsEmojiCounts {
-  bottles: number;
+  droplets: number;
   trees: number;
   hasSavings: boolean;
   waterLiters: number;
   treeMinutes: number;
-  capped: { bottles: boolean; trees: boolean };
+  capped: { droplets: boolean; trees: boolean };
 }
 
-/** Map session lifetime savings into water-bottle and tree emoji counts. */
+/** Map session lifetime savings into water-droplet and tree emoji counts. */
 export function savingsEmojiCounts(life: LifetimeSavings): SavingsEmojiCounts {
   const waterLiters = life.waterLiters;
   const treeMinutes = treeMinutesFromCo2eGrams(Math.max(0, life.co2eGrams));
-  const bottles = iconCount(waterLiters, SAVINGS_EMOJI_SCALE.bottleLiters, SAVINGS_EMOJI_SCALE.maxIcons);
+  const droplets = iconCount(waterLiters, SAVINGS_EMOJI_SCALE.dropletLiters, SAVINGS_EMOJI_SCALE.maxIcons);
   const trees = iconCount(treeMinutes, SAVINGS_EMOJI_SCALE.treeMinutes, SAVINGS_EMOJI_SCALE.maxIcons);
   return {
-    bottles: bottles.count,
+    droplets: droplets.count,
     trees: trees.count,
     hasSavings: waterLiters > 0 || life.co2eGrams > 0,
     waterLiters,
     treeMinutes,
-    capped: { bottles: bottles.capped, trees: trees.capped },
+    capped: { droplets: droplets.capped, trees: trees.capped },
   };
 }

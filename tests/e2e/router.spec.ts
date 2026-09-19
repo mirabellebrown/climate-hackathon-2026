@@ -69,7 +69,7 @@ test("starts empty, routes an example, persists numeric totals, and resets", asy
   await expect(page.getByTestId("savings-gauge")).toBeVisible();
   await expect(page.getByTestId("savings-gauge-fill")).toHaveAttribute("data-fill", /^(100|[1-9]?\d)$/);
   await expect(page.getByTestId("savings-gauge-caption")).not.toContainText("vs Always Pro");
-  await expect(page.getByTestId("savings-bottles")).toBeVisible();
+  await expect(page.getByTestId("savings-droplets")).toBeVisible();
   await expect(page.getByTestId("savings-trees")).toBeVisible();
   await page.getByRole("textbox", { name: "Your prompt" }).fill("Second turn, still independent.");
   await page.getByRole("button", { name: "Send" }).click();

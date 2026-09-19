@@ -1,6 +1,8 @@
 import { classify } from "@/lib/classify";
 import { BASELINE_MODEL, MODELS } from "@/lib/config";
 import { estimateImpact } from "@/lib/ecologits";
+import { adaptRouteResultToRecord } from "@/lib/esg/adapt";
+import { appendEsgRecord } from "@/lib/esg/store";
 import { RouteFailure } from "@/lib/errors";
 import { generate } from "@/lib/generate";
 import { compareUsage } from "@/lib/impact";
@@ -42,6 +44,13 @@ export async function POST(request: Request): Promise<Response> {
       }),
       truncated: generation.truncated,
     };
+    try {
+      appendEsgRecord(adaptRouteResultToRecord(result, {
+        latencySeconds: classifierLatencySeconds + generationLatencySeconds,
+      }));
+    } catch {
+      /* ESG store must not fail the chat response */
+    }
     return Response.json(result, { headers });
   } catch (error) {
     // Never return raw provider errors, which may contain prompts or credentials.

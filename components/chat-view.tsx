@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CircleAlert, Copy, GitBranch, Leaf, LoaderCircle, Plus } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, Copy, GitBranch, Leaf, LoaderCircle, Plus, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EfficiencyStrip } from "@/components/efficiency-strip";
@@ -10,7 +10,10 @@ import { SavingsGauge } from "@/components/savings-gauge";
 import { SessionSavingsEmojis } from "@/components/session-savings-emojis";
 import { appendTurn, getConversationSnapshot, getServerConversationSnapshot, latestResult, newTurnId, resetConversation, subscribeConversation } from "@/lib/conversation";
 import { MAX_PROMPT_LENGTH } from "@/lib/config";
+import { DEMO_TURN_COUNT, loadDemoData } from "@/lib/demo-seed";
 import { tokens } from "@/lib/format";
+import { adaptRouteResultToRecord } from "@/lib/esg/adapt";
+import { appendClientEsgRecord } from "@/lib/esg/client-store";
 import { recordRoute } from "@/lib/session";
 import type { RouteError, RouteResult } from "@/lib/types";
 
@@ -78,6 +81,7 @@ export function ChatView() {
       } else {
         appendTurn({ id: newTurnId(), prompt: nextPrompt, result: data });
         recordRoute(nextPrompt, data);
+        try { appendClientEsgRecord(adaptRouteResultToRecord(data)); } catch { /* local ESG optional */ }
       }
     } catch {
       const nextError = { code: "NETWORK_ERROR", message: "We couldn’t reach the router. Check your connection and try again.", stage: "request" as const };
@@ -131,14 +135,27 @@ export function ChatView() {
           <div className="welcome-composer">
             {composer}
             <div className="examples"><span>Try a prompt</span>{EXAMPLES.map((example) => <button key={example.label} type="button" disabled={loading} onClick={() => { setPrompt(example.prompt); textarea.current?.focus(); }}>{example.label}</button>)}</div>
-            <SessionSavingsEmojis />
+            <div className="demo-seed-row">
+              <button type="button" className="demo-seed-button" data-testid="load-demo-data" disabled={loading} onClick={() => { loadDemoData(); setError(null); setPendingPrompt(null); }}>
+                <Sparkles size={14} />Load demo data ({DEMO_TURN_COUNT} turns)
+              </button>
+            </div>
+            <div className="chat-savings-footer">
+              <SessionSavingsEmojis />
+              <SavingsGauge />
+            </div>
           </div>
         </section>
       ) : (
         <>
           <div className="chat-toolbar">
             <p>Team chat · each prompt is classified on its own</p>
-            <button type="button" className="new-chat-button" onClick={resetConversation} disabled={loading || turns.length === 0}><Plus size={14} />New conversation</button>
+            <div className="chat-toolbar-actions">
+              <button type="button" className="demo-seed-button" data-testid="load-demo-data" disabled={loading} onClick={() => { loadDemoData(); setError(null); setPendingPrompt(null); setCopiedId(null); setCopyErrorId(null); }}>
+                <Sparkles size={14} />Load demo data
+              </button>
+              <button type="button" className="new-chat-button" onClick={resetConversation} disabled={loading || turns.length === 0}><Plus size={14} />New conversation</button>
+            </div>
           </div>
           <div className="chat-thread" role="log" aria-live="polite" aria-relevant="additions">
             {turns.map((turn) => <article key={turn.id} className="turn">
@@ -156,11 +173,13 @@ export function ChatView() {
           <div className="composer-dock">
             {composer}
             <div className="examples dock-examples"><span>Try a prompt</span>{EXAMPLES.map((example) => <button key={example.label} type="button" disabled={loading} onClick={() => { setPrompt(example.prompt); textarea.current?.focus(); }}>{example.label}</button>)}</div>
-            <SessionSavingsEmojis />
+            <div className="chat-savings-footer">
+              <SessionSavingsEmojis />
+              <SavingsGauge />
+            </div>
           </div>
         </>
       )}
-      <SavingsGauge />
     </main>
   </>;
 }

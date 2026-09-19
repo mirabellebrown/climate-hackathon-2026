@@ -21,7 +21,7 @@ function BoltIcon() {
   );
 }
 
-/** Frame_18-style circular savings gauge — bottom-right on chat, links to /dashboard. */
+/** Frame_18-style circular savings gauge — in-flow under composer, links to /dashboard. */
 export function SavingsGauge() {
   const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot);
   const cost = costOverview(session);

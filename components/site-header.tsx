@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Leaf, Scale } from "lucide-react";
+import { FileBarChart, Leaf, Scale } from "lucide-react";
 
 export function SiteHeader() {
   const pathname = usePathname();
   const onDashboard = pathname === "/dashboard";
+  const onEsg = pathname.startsWith("/reports/esg");
   return (
     <header className="site-header">
       <Link className="brand" href="/" aria-label="GreenRoute home">
@@ -15,6 +16,13 @@ export function SiteHeader() {
       </Link>
       <div className="header-actions">
         <span className="header-pill"><span />Carbon-aware AI</span>
+        <Link
+          className="impact-toggle"
+          href="/reports/esg"
+          aria-current={onEsg ? "page" : undefined}
+        >
+          <FileBarChart size={15} />ESG
+        </Link>
         <Link
           className="impact-toggle"
           href="/dashboard"

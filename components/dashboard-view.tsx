@@ -18,7 +18,10 @@ export function DashboardView() {
       <div className="dashboard-shell">
         <div className="dashboard-top">
           <Link className="back-to-chat" href="/"><ArrowLeft size={16} />Back to team chat</Link>
-          <p className="dashboard-kicker">Usage dashboard · manager view</p>
+          <div className="dashboard-top-actions">
+            <Link className="esg-dash-link" href="/reports/esg">AI environmental reporting →</Link>
+            <p className="dashboard-kicker">Usage dashboard · manager view</p>
+          </div>
         </div>
         <LifetimeHero />
         <TokenUsageOverview />

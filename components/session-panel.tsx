@@ -1,8 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { ArrowDownRight, RotateCcw, Sprout } from "lucide-react";
+import { ArrowDownRight, RotateCcw, Sparkles, Sprout } from "lucide-react";
 import { clearConversation } from "@/lib/conversation";
+import { DEMO_TURN_COUNT, loadDemoData } from "@/lib/demo-seed";
 import { getServerSessionSnapshot, getSessionSnapshot, lifetimeSavings, resetSession, subscribeSession } from "@/lib/session";
 import { money, number, percent, tokens } from "@/lib/format";
 
@@ -19,7 +20,10 @@ export function SessionPanel({ disabled }: { disabled: boolean }) {
     <div className="session-stat"><strong data-testid="session-carbon">{session.requests ? number(Math.abs(life.co2eGrams)) : "—"}<small> g CO₂e</small></strong><span>{life.extraCo2 ? "extra emissions" : "estimated emissions saved"}</span></div>
     <div className="session-stat"><strong data-testid="session-cost">{session.requests ? money(Math.abs(life.usd)) : "—"}</strong><span>{life.extraUsd ? "extra API cost" : "estimated API cost saved"}</span></div>
     <div className="session-stat"><strong>{percent(savedCostPercent)}</strong><span>{life.extraUsd ? "more" : "less"} expensive overall</span></div>
-    <button className="reset-button" onClick={() => { resetSession(); clearConversation(); }} disabled={disabled || !session.requests} aria-label="Reset session totals" title="Reset session totals"><RotateCcw size={17} /></button>
+    <div className="session-panel-actions">
+      <button type="button" className="demo-seed-button" data-testid="load-demo-data-dashboard" disabled={disabled} onClick={() => loadDemoData()} title={`Load ${DEMO_TURN_COUNT} synthetic turns`}><Sparkles size={14} />Load demo data</button>
+      <button className="reset-button" onClick={() => { resetSession(); clearConversation(); }} disabled={disabled || !session.requests} aria-label="Reset session totals" title="Reset session totals"><RotateCcw size={17} /></button>
+    </div>
     {session.entries.length > 0 && <div className="prompt-log">
       <h3>Prompt token log</h3>
       <p>Each row is the model we used for that prompt versus the Gemini Pro counterfactual for the same answer tokens.</p>
