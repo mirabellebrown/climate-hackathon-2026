@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CircleAlert, Copy, GitBranch, Leaf, LoaderCircle, Plus, RotateCcw, Scale } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, Copy, GitBranch, Leaf, LoaderCircle, Plus, RotateCcw, Scale, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MAX_PROMPT_LENGTH } from "@/lib/config";
 import { number, percent, tokens } from "@/lib/format";
-import { getServerSessionSnapshot, getSessionSnapshot, recordResults, subscribeSession } from "@/lib/session";
+import { SavingsGauge } from "@/components/savings-gauge";
+import { SessionSavingsEmojis } from "@/components/session-savings-emojis";
+import { buildDemoTurns, DEMO_TURN_COUNT } from "@/lib/demo-seed";
+import { recordResults, resetSession } from "@/lib/session";
 import type { ChatReply, DashboardState, RouteError, RouteResult } from "@/lib/types";
 
 // GreenRoute chat UI (from feat/claude-api-router), backed by Canopy's routing and the
@@ -56,7 +59,6 @@ export default function Home() {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const threadEnd = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
-  const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot);
   const latest = turns.findLast((turn) => turn.reply)?.reply?.result ?? null;
   const empty = turns.length === 0 && !pending;
   const canSubmit = prompt.trim().length > 0 && prompt.length <= MAX_PROMPT_LENGTH && !loading;
@@ -126,10 +128,18 @@ export default function Home() {
     try { await navigator.clipboard.writeText(turn.reply!.answer); setCopiedId(turn.id); } catch { setCopiedId(null); }
   }
 
-  const sessionSaved = session.baselineWh ? (session.baselineWh - session.routedWh) / session.baselineWh * 100 : null;
-  const sessionLine = session.requests
-    ? `${session.requests} ${session.requests === 1 ? "answer" : "answers"} · ${percent(sessionSaved)} ${session.routedWh > session.baselineWh ? "more" : "less"} energy than always using Opus`
-    : "Your savings add up here as you chat";
+  /** Replace the conversation and session totals with local demo turns (no model calls). */
+  function loadDemo() {
+    const demo = buildDemoTurns();
+    resetSession();
+    recordResults(demo.map((turn) => turn.result));
+    setTurns(demo.map((turn) => ({ id: turn.id, prompt: turn.prompt, reply: { answer: turn.answer, result: turn.result } })));
+    setSessionId(null);
+    setPending(null);
+    setCopiedId(null);
+  }
+  const demoButton = (label: string) => <button type="button" className="demo-seed-button" data-testid="load-demo-data" disabled={loading} onClick={loadDemo}><Sparkles size={14} />{label}</button>;
+  const savingsFooter = <div className="chat-savings-footer"><SessionSavingsEmojis /><SavingsGauge /></div>;
 
   const examples = (className: string) => <div className={className}><span>Try a prompt</span>{EXAMPLES.map((example) => <button key={example.label} type="button" disabled={loading} onClick={() => { setPrompt(example.prompt); textarea.current?.focus(); }}>{example.label}</button>)}</div>;
 
@@ -156,12 +166,16 @@ export default function Home() {
           {configured === false && <p className="fallback-note">Add GEMINI_API_KEY to .env.local, then restart the app.</p>}
           {composer}
           {examples("examples")}
-          <p className="session-line" data-testid="session-line">{sessionLine}</p>
+          <div className="demo-seed-row">{demoButton(`Load demo data (${DEMO_TURN_COUNT} turns)`)}</div>
+          {savingsFooter}
         </div>
       </section> : <>
         <div className="chat-toolbar">
           <p>Team chat · each prompt is routed on its own, in one continuing conversation</p>
-          <button type="button" className="new-chat-button" onClick={newConversation} disabled={loading}><Plus size={14} />New conversation</button>
+          <div className="chat-toolbar-actions">
+            {demoButton("Load demo data")}
+            <button type="button" className="new-chat-button" onClick={newConversation} disabled={loading}><Plus size={14} />New conversation</button>
+          </div>
         </div>
         <div className="chat-thread" role="log" aria-live="polite" aria-relevant="additions">
           {turns.map((turn) => <article key={turn.id} className="turn">
@@ -190,7 +204,7 @@ export default function Home() {
         <div className="composer-dock">
           {composer}
           {examples("examples dock-examples")}
-          <p className="session-line" data-testid="session-line">{sessionLine}</p>
+          {savingsFooter}
         </div>
       </>}
     </main>

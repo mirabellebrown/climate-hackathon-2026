@@ -37,7 +37,7 @@ async function mock(page: Page, respond: (body: { prompt: string; sessionId?: st
 
 const model = (page: Page) => page.locator(".message-assistant .routing-result strong").last();
 const saving = (page: Page) => page.getByTestId("efficiency-savings");
-const sessionLine = (page: Page) => page.getByTestId("session-line");
+const gauge = (page: Page) => page.getByTestId("savings-gauge-caption");
 
 async function send(page: Page, text: string) {
   await page.getByRole("textbox", { name: "Your message" }).fill(text);
@@ -50,7 +50,7 @@ test("chats, continues the conversation, shows impact, and counts each run once"
   const bodies = await mock(page, (body) => reply(body.sessionId ? "medium" : "light"));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "What’s on your mind?" })).toBeVisible();
-  await expect(sessionLine(page)).toHaveText("Your savings add up here as you chat");
+  await expect(gauge(page)).toHaveText("vs always Opus");
   await page.getByRole("button", { name: "Explain something" }).click();
   await expect(page.getByRole("textbox", { name: "Your message" })).toHaveValue(/leaves/);
   await page.getByRole("button", { name: "Send" }).click();
@@ -59,7 +59,7 @@ test("chats, continues the conversation, shows impact, and counts each run once"
   await expect(page.locator(".answer-markdown strong")).toHaveText("chlorophyll breaks down");
   await expect(model(page)).toHaveText("Claude Haiku 4.5");
   await expect(saving(page)).toHaveText("74.4% less energy than Opus");
-  await expect(sessionLine(page)).toContainText("1 answer ·");
+  await expect(gauge(page)).toContainText("· 1 answer");
   expect(bodies[0]).not.toHaveProperty("sessionId");
 
   await send(page, "And in code?");
@@ -67,7 +67,7 @@ test("chats, continues the conversation, shows impact, and counts each run once"
   expect(bodies[1]).toEqual({ prompt: "And in code?", sessionId: SESSION });
   await expect(saving(page)).toHaveText("49.4% less energy than Opus");
   await page.waitForTimeout(5_500); // A poll returns both runs again.
-  await expect(sessionLine(page)).toContainText("2 answers ·");
+  await expect(gauge(page)).toContainText("· 2 answers");
 
   // Each reply keeps its own impact line.
   await expect(page.locator(".turn-impact").first()).toContainText("74.4% less energy than Opus");
@@ -101,11 +101,11 @@ test("shows a failure, allows retry, and does not count the failure", async ({ p
   await page.goto("/");
   await send(page, "Explain why leaves change color.");
   await expect(page.getByRole("alert").filter({ hasText: "isn't signed in" })).toBeVisible();
-  await expect(sessionLine(page)).toHaveText("Your savings add up here as you chat");
+  await expect(gauge(page)).toHaveText("vs always Opus");
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(model(page)).toHaveText("Claude Haiku 4.5");
   await expect(page.locator(".user-bubble")).toHaveCount(1);
-  await expect(sessionLine(page)).toContainText("1 answer ·");
+  await expect(gauge(page)).toContainText("· 1 answer");
 });
 
 test("locks input while waiting and supports Shift+Enter for new lines", async ({ page }) => {
@@ -155,7 +155,7 @@ test("storage failures keep the chat usable", async ({ page }) => {
   await page.goto("/");
   await send(page, "Hello");
   await expect(model(page)).toHaveText("Claude Haiku 4.5");
-  await expect(sessionLine(page)).toContainText("1 answer ·");
+  await expect(gauge(page)).toContainText("· 1 answer");
 });
 
 test("real HTTP endpoints validate input, need only Gemini, and stay local", async ({ request }) => {
@@ -168,4 +168,24 @@ test("real HTTP endpoints validate input, need only Gemini, and stay local", asy
   }
   expect((await request.post("/api/chat", { data: { prompt: "Hello", sessionId: "bad" } })).status()).toBe(400);
   expect(await (await request.get("/api/session")).json()).toEqual({ configured: false, activities: [] });
+});
+
+test("loads demo data without calling a model, and fills the gauge and emoji strip", async ({ page }) => {
+  let calls = 0;
+  await page.route("**/api/chat", (route) => { calls += 1; return route.abort(); });
+  await page.route("**/api/session", (route) => route.fulfill({ json: { configured: true, activities: [] } }));
+  await page.goto("/");
+  await expect(page.getByTestId("session-savings-emojis-empty")).toBeVisible();
+  await page.getByTestId("load-demo-data").click();
+  await expect(page.locator(".user-bubble")).toHaveCount(21);
+  await expect(gauge(page)).toContainText("· 21 answers");
+  await expect(page.getByTestId("savings-gauge-fill")).not.toHaveAttribute("data-fill", "0");
+  await expect(page.getByTestId("savings-droplets")).toBeVisible();
+  await expect(page.getByTestId("savings-trees")).toBeVisible();
+  await expect(page.locator(".message-assistant strong", { hasText: "Claude Opus 5" }).first()).toBeVisible();
+  // Loading again replaces rather than doubles the demo.
+  await page.getByTestId("load-demo-data").click();
+  await expect(page.locator(".user-bubble")).toHaveCount(21);
+  await expect(gauge(page)).toContainText("· 21 answers");
+  expect(calls).toBe(0);
 });

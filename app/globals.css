@@ -151,8 +151,7 @@ h1 {
   align-items: center;
   justify-content: center;
   text-align: center;
-  /* Extra bottom space so fixed Savings gauge never covers welcome controls */
-  padding: var(--space-xl) 5% max(var(--space-xxl), 148px);
+  padding: var(--space-xl) 5% var(--space-xxl);
 }
 .chat-welcome h1 { margin-bottom: 0; }
 .chat-welcome .hero-description { margin-left: auto; margin-right: auto; }
@@ -247,6 +246,21 @@ h1 {
   font-size: 12px;
 }
 .chat-toolbar p { margin: 0; }
+.chat-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.demo-seed-row { margin-top: var(--space-md); }
+.demo-seed-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--hairline));
+  border-radius: var(--radius-pill);
+  color: var(--primary);
+  font-size: 12px;
+  padding: 7px 12px;
+}
+.demo-seed-button:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 14%, transparent); border-color: var(--primary-focus); }
+.demo-seed-button:disabled { opacity: .45; }
 .new-chat-button {
   display: inline-flex;
   align-items: center;
@@ -259,7 +273,7 @@ h1 {
   padding: 7px 12px;
 }
 .new-chat-button:hover:not(:disabled) { border-color: var(--primary-focus); color: var(--primary); }
-.chat-thread { flex: 1; width: min(760px, 90%); margin: 0 auto; padding: 12px 0 8px; overflow-y: auto; }
+.chat-thread { flex: 1; width: min(760px, 90%); margin: 0 auto; padding: 12px 0 8px; }
 .turn { padding: 6px 0 18px; }
 .message-user { display: flex; justify-content: flex-end; }
 .user-bubble {
@@ -358,42 +372,38 @@ h1 {
 .thinking-row h3 { font-size: 17px; font-weight: 600; margin: 0 0 4px; color: var(--ink); }
 .thinking-row p { margin: 0; font-size: 14px; line-height: 1.5; }
 .composer-dock {
-  position: sticky;
-  bottom: 0;
-  /* Bottom padding clears the fixed Savings gauge */
-  padding: 8px 0 148px;
+  padding: 8px 0 var(--space-xl);
   background: var(--canvas-parchment);
 }
 .composer-dock .composer,
-.composer-dock .dock-examples {
+.composer-dock .dock-examples,
+.composer-dock .chat-savings-footer {
   width: min(760px, 90%);
   margin-left: auto;
   margin-right: auto;
 }
 .dock-examples { margin-top: 10px; }
 
-/* Water + tree emoji strip — in-flow under example prompts (gauge stays bottom-right) */
-.session-savings-emojis {
-  position: relative;
-  z-index: 1;
+/* Water + tree strip and Savings gauge — in-flow under composer / examples */
+.chat-savings-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
   margin-top: 14px;
-  max-width: min(280px, calc(100% - 120px));
+}
+.welcome-composer .chat-savings-footer {
+  width: 100%;
+}
+.session-savings-emojis {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(280px, 100%);
   padding: 10px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   background: var(--canvas);
   box-sizing: border-box;
-}
-.welcome-composer .session-savings-emojis {
-  margin-left: 0;
-  margin-right: auto;
-}
-.composer-dock .session-savings-emojis {
-  /* Align with composer column left edge; leave room for fixed gauge */
-  width: min(280px, calc(90% - 120px));
-  max-width: min(280px, calc(90% - 120px));
-  margin-left: max(5%, calc((100% - 760px) / 2));
-  margin-right: auto;
 }
 .session-savings-emojis-empty {
   margin: 0;
@@ -442,12 +452,9 @@ h1 {
   color: var(--ink-muted-48);
 }
 
-/* Frame_18 Savings gauge — fixed bottom-right on chat */
+/* Frame_18 Savings gauge — in-flow at end of chat column */
 .savings-gauge {
-  position: fixed;
-  right: max(16px, calc((100vw - 980px) / 2 + 8px));
-  bottom: 20px;
-  z-index: 40;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -510,21 +517,19 @@ h1 {
 .chat-page.is-active { padding-bottom: 0; }
 @media (max-width: 760px) {
   .chat-welcome {
-    padding-bottom: max(40px, 128px);
+    padding-bottom: var(--space-xl);
   }
   .composer-dock {
-    padding-bottom: 128px;
+    padding-bottom: var(--space-xl);
+  }
+  .chat-savings-footer {
+    gap: 12px;
   }
   .session-savings-emojis {
-    max-width: min(220px, calc(100% - 100px));
-  }
-  .composer-dock .session-savings-emojis {
-    max-width: min(220px, calc(90% - 100px));
+    max-width: min(220px, calc(100% - 96px));
   }
   .session-savings-emoji-caption { display: none; }
   .savings-gauge {
-    right: 12px;
-    bottom: 12px;
     width: 88px;
   }
   .savings-gauge-dial { width: 72px; height: 72px; }
@@ -1133,10 +1138,6 @@ h1 {
 }
 
 /* Canopy additions in the GreenRoute language */
-.session-line { margin: var(--space-sm) 0 0; font-size: 12px; color: var(--ink-muted-48); }
 .turn-impact { margin: var(--space-sm) 0 0; font-size: 12px; color: var(--ink-muted-48); }
 .error-message .retry-button { margin-top: var(--space-sm); }
 .welcome-composer .fallback-note { margin: 0 0 var(--space-sm); }
-.composer-dock { padding-bottom: 20px; }
-.composer-dock .session-line { width: min(760px, 90%); margin-left: auto; margin-right: auto; }
-.chat-welcome { padding-bottom: var(--space-xxl); }
