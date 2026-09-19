@@ -80,7 +80,8 @@ describe("canopy launcher", () => {
           if (routeStatus !== 200) { res.statusCode = routeStatus; res.end(JSON.stringify({ error: { code: "MISSING_API_KEYS", message: "Add GEMINI_API_KEY to .env.local on the server, then restart the app.", stage: "configuration" } })); return; }
           res.end(JSON.stringify({ id: "9b1c3f2e-0000-4000-8000-000000000001", routing: { tier: "light", reason: "Short explanation.", model: "claude-haiku-4-5", modelName: "Claude Haiku 4.5" } }));
         } else if (req.url === "/api/usage") {
-          if (body.status === "failed") { res.end(JSON.stringify({ status: "failed" })); return; }
+          // Mirrors the real server: a failed run's activity carries an `error` message string.
+          if (body.status === "failed") { res.end(JSON.stringify({ status: "failed", error: "Routing preview only. Claude Code was not run." })); return; }
           const selected = (body.models as { model: string }[]).some((model) => model.model !== "claude-haiku-4-5");
           res.end(JSON.stringify({ modelMismatch: selected, usage: { generation: { inputTokens: 1512, outputTokens: 300 } }, impact: { routed: { energyWh: 0.53, co2eGrams: 0.15 }, savings: { percent: 74.2, energyWh: 1 } } }));
         } else { res.statusCode = 404; res.end("{}"); }
@@ -175,6 +176,7 @@ describe("canopy launcher", () => {
     expect(result.code).toBe(0);
     expect(result.calls).toHaveLength(0);
     expect(received[1].body).toMatchObject({ status: "failed", reason: "dry_run" });
+    expect(result.stderr).not.toContain("could not report");
   });
   it("forwards Ctrl-C to Claude Code and records a cancelled run", async () => {
     const log = join(dir, "hang.log");

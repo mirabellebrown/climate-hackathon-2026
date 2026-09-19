@@ -24,7 +24,8 @@ async function post(server, path, body, timeoutMs) {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs),
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok || !data || data.error) {
+  // A failed run's activity has its own `error` text; only an error object means the request failed.
+  if (!response.ok || !data || typeof data.error === "object") {
     throw new Error(data?.error?.message ?? `The Canopy server responded with HTTP ${response.status}.`);
   }
   return data;
