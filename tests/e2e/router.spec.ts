@@ -8,7 +8,7 @@ let counter = 0;
 function activity(tier: Tier, status: Activity["status"] = "completed", models?: ModelUsage[]): Activity {
   const id = `00000000-0000-4000-8000-${String(++counter).padStart(12, "0")}`;
   const createdAt = new Date().toISOString();
-  const routing = { tier, reason: tier === "heavy" ? "The complex architecture requires deeper analysis." : "A short explanation fits a smaller model.", model: MODELS[tier].id, modelName: MODELS[tier].name, classifierModel: "gemini-2.5-flash-lite", classifierFallback: false, baselineModel: MODELS.heavy.id };
+  const routing = { tier, reason: tier === "heavy" ? "The complex architecture requires deeper analysis." : "A short explanation fits a smaller model.", model: MODELS[tier].id, modelName: MODELS[tier].name, classifierModel: "gemini-3.1-flash-lite", classifierFallback: false, baselineModel: MODELS.heavy.id };
   if (status !== "completed") return { id, createdAt, routing, status, ...(status === "failed" ? { error: "The run was cancelled in the terminal. No usage is included in savings." } : {}) };
   const used = models ?? [{ model: MODELS[tier].id, inputTokens: 1000, outputTokens: 1000, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }];
   const classifier = { inputTokens: 200, outputTokens: 40 };

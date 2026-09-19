@@ -70,6 +70,8 @@ describe("POST /api/route (classification only)", () => {
     expect(decision).not.toHaveProperty("answer");
     expect(calls).toHaveLength(1);
     expect(calls[0].body.contents).toEqual([{ role: "user", parts: [{ text: original }] }]);
+    expect(calls[0].url).toContain(CLASSIFIER_MODEL);
+    expect(calls[0].body.generationConfig).toMatchObject({ responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "MINIMAL" } });
     expect(JSON.stringify(decision)).not.toContain("secret");
   });
   it("stores the decision as in-progress activity without the prompt", async () => {
@@ -88,6 +90,7 @@ describe("POST /api/route (classification only)", () => {
     const decision = await (await route(request())).json();
     expect(calls).toHaveLength(2);
     expect(calls[1].url).toContain(CLASSIFIER_FALLBACK_MODEL);
+    expect(calls[1].body.generationConfig).toMatchObject({ thinkingConfig: { thinkingBudget: 0 } });
     expect(decision.routing.classifierFallback).toBe(true);
   });
   it.each([401, 403, 429, 500, 503])("fails clearly on Gemini %s without retrying", async (status) => {

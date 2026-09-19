@@ -70,7 +70,7 @@ flowchart LR
 
 ## Model map
 
-- Classifier: `gemini-2.5-flash-lite`. The fallback `gemini-3.1-flash-lite-preview` is used **only** after a 404. **Note:** Google retired that preview on May 25, 2026 and recommends `gemini-3.1-flash-lite`. Updating `lib/config.ts` is pending a team decision.
+- Classifier: `gemini-3.1-flash-lite` (stable), with minimal thinking. The fallback `gemini-2.5-flash-lite` is used **only** after a 404. Google has closed 2.5 to new API users, so the fallback only helps older keys.
 - Light `claude-haiku-4-5`, medium `claude-sonnet-5`, heavy and fixed baseline `claude-opus-5`.
 - Claude Code may use additional models in a run, for example for subagents or background tasks, or it may substitute one. The dashboard shows every model it reported and flags a mismatch. Impact uses the reported models. A model family with no factor is rejected rather than guessed.
 

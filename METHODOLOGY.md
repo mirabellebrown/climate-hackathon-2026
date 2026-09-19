@@ -78,7 +78,7 @@ With those same token counts routed to Opus: **6.06555 Wh** routed and **−0.03
 
 **Baseline.** The baseline uses the **same token counts** at Opus factors, with no classifier and no second run. Opus is assumed to do similar-length work. Answer quality, length, tool use and reasoning are not compared experimentally.
 
-**Classifier.** Gemini input includes system/schema overhead reported by the API. Output includes candidate and reported thinking tokens; 2.5 thinking is disabled. A primary-model 404 can trigger the pinned fallback. Missing or invalid usage from either provider produces an error, never an invented zero.
+**Classifier.** Gemini input includes system/schema overhead reported by the API. Output includes candidate and reported thinking tokens; the 3.1 primary runs with minimal thinking and the 2.5 fallback with thinking disabled. A primary-model 404 can trigger the pinned fallback. Missing or invalid usage from either provider produces an error, never an invented zero.
 
 **Failures.** Failed, cancelled, dry-run, or unreported runs are shown but excluded from totals, even though they may have used resources. Runs that never report back are marked failed after an hour. This is not a billing ledger. The server keeps numeric activity in memory only. The browser stores counts, energy sums, counted routing IDs and the factor version, never prompts or answers.
 

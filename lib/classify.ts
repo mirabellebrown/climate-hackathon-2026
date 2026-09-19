@@ -1,5 +1,5 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { CLASSIFIER_FALLBACK_MODEL, CLASSIFIER_MODEL } from "./config";
 import { providerFailure, providerStatus, RouteFailure } from "./errors";
 import { validTokenCount } from "./impact";
@@ -43,7 +43,8 @@ export async function classify(prompt: string): Promise<Classification> {
           reason: { type: "string" },
         }, required: ["tier", "reason"], additionalProperties: false,
       },
-      ...(selected === CLASSIFIER_MODEL ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      // Keep classification cheap: minimal thinking on 3.x, none on 2.5.
+      thinkingConfig: selected.startsWith("gemini-2.5") ? { thinkingBudget: 0 } : { thinkingLevel: ThinkingLevel.MINIMAL },
       httpOptions: { timeout: 30_000, retryOptions: { attempts: 1 } },
     },
   });
