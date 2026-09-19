@@ -10,4 +10,3 @@ export const CLASSIFIER_MODEL = "gemini-2.5-flash-lite";
 export const CLASSIFIER_FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 export const BASELINE_MODEL = MODELS.heavy;
 export const MAX_PROMPT_LENGTH = 20_000;
-export const MAX_OUTPUT_TOKENS = 4_096;

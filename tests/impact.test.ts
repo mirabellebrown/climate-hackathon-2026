@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateImpact, energyForTokens, footprintFromEnergy } from "@/lib/impact";
+import { calculateImpact, calculateObservedImpact, energyForTokens, footprintFromEnergy, tierForModel, totalModelTokens } from "@/lib/impact";
 import type { Tier } from "@/lib/types";
 
 describe("impact math and units", () => {
@@ -53,5 +53,33 @@ describe("impact math and units", () => {
   it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])("rejects invalid token counts (%s)", (invalid) => {
     expect(() => energyForTokens({ inputTokens: invalid, outputTokens: 1 }, 1)).toThrow();
     expect(() => energyForTokens({ inputTokens: 1, outputTokens: invalid }, 1)).toThrow();
+  });
+});
+
+describe("observed Claude Code impact", () => {
+  const usage = (model: string, input: number, output: number, cacheRead = 0, cacheWrite = 0) => ({ model, inputTokens: input, outputTokens: output, cacheReadInputTokens: cacheRead, cacheCreationInputTokens: cacheWrite });
+  it("matches the golden example for a single Sonnet run", () => {
+    const impact = calculateObservedImpact([usage("claude-sonnet-5", 1000, 1000)], { inputTokens: 200, outputTokens: 40 });
+    expect(impact.routed.energyWh).toBeCloseTo(3.05055, 10);
+    expect(impact.baseline.energyWh).toBeCloseTo(6.03, 10);
+    expect(impact.savings.percent).toBeCloseTo(49.41044776, 6);
+  });
+  it("counts cache reads and writes as full input tokens", () => {
+    const models = [usage("claude-haiku-4-5", 10, 0, 400, 600)];
+    expect(totalModelTokens(models)).toEqual({ inputTokens: 1010, outputTokens: 0 });
+    expect(calculateObservedImpact(models, { inputTokens: 0, outputTokens: 0 }).generation.energyWh).toBeCloseTo(1010 * 0.000135 * 0.5, 12);
+  });
+  it("prices each model family it actually used", () => {
+    const impact = calculateObservedImpact([usage("claude-haiku-4-5", 1000, 1000), usage("claude-opus-5", 1000, 1000)], { inputTokens: 0, outputTokens: 0 });
+    expect(impact.generation.energyWh).toBeCloseTo(1.5075 + 6.03, 10);
+    expect(impact.baseline.energyWh).toBeCloseTo(12.06, 10);
+  });
+  it("refuses unknown models and invalid counts instead of guessing", () => {
+    expect(() => calculateObservedImpact([usage("claude-fable-5", 1, 1)], { inputTokens: 0, outputTokens: 0 })).toThrow(/No impact factor/);
+    expect(() => calculateObservedImpact([usage("claude-sonnet-5", 1, 1, -1)], { inputTokens: 0, outputTokens: 0 })).toThrow();
+    expect(() => calculateObservedImpact([], { inputTokens: 0, outputTokens: 0 })).toThrow();
+  });
+  it.each([["claude-haiku-4-5", "light"], ["claude-sonnet-5", "medium"], ["claude-opus-5", "heavy"], ["claude-3-opus", null], ["gpt-5", null]])("maps %s to %s", (model, tier) => {
+    expect(tierForModel(model)).toBe(tier);
   });
 });

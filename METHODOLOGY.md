@@ -2,7 +2,7 @@
 
 Version: `2026-09-19-v1`, in `lib/factors.ts` and `lib/impact.ts`.
 
-These are **order-of-magnitude inference estimates**, not measurements. Tokens come from provider usage metadata; environmental factors are assumptions. No carbon neutrality, offsets, or trees-planted claims.
+These are **order-of-magnitude inference estimates**, not measurements. Tokens come from Gemini usage metadata and Claude Code’s reported `modelUsage`; environmental factors are assumptions. No carbon neutrality, offsets, or trees-planted claims.
 
 ## Factors and provenance
 
@@ -25,11 +25,14 @@ For input tokens `I`, output tokens `O`, multiplier `s`:
 ```text
 energyWh(I, O, s) = (I × 0.000135 + O × 0.00288) × s
 
-generationWh = energyWh(Claude input, Claude output, chosen scale)
+For each model m that Claude Code reports in modelUsage:
+  I_m = inputTokens + cacheReadInputTokens + cacheCreationInputTokens
+  O_m = outputTokens
+generationWh = Σ energyWh(I_m, O_m, scale of m's family)
 classifierWh = energyWh(Gemini input, Gemini output, 0.25)
 routedWh = generationWh + classifierWh
 
-baselineWh = energyWh(Claude input, Claude output, 2)
+baselineWh = energyWh(Σ I_m, Σ O_m, 2)
 savedWh = baselineWh − routedWh
 savedPercent = 100 × savedWh / baselineWh
 ```
@@ -69,10 +72,14 @@ With those same token counts routed to Opus: **6.06555 Wh** routed and **−0.03
 
 ## Accounting boundaries
 
-The baseline uses the **same generation token counts**, with no classifier or second request. Opus is assumed to produce a similar-length answer. Different answer quality, length, tokenization and reasoning behavior are not experimentally compared.
+**What counts as a run.** A `canopy` run is one `claude -p` invocation. Claude Code can make several model calls in it: tool-use turns, subagents, or background tasks on another model. Canopy uses the per-model `modelUsage` totals that Claude Code prints in its JSON result. Each model is priced by the family Claude Code actually reported (Haiku, Sonnet or Opus). A model with no factor, such as a new family, is rejected, never guessed. The dashboard flags runs where the reported models differ from the selection.
 
-Gemini input includes system/schema overhead reported by the API. Output includes candidate and reported thinking tokens; 2.5 thinking is disabled. A primary 404 can trigger the pinned Flash Lite fallback; only successful usage is available. Claude input/output counts include any cache input fields. V1 requests no caching and gives no energy discount to cache tokens. Missing/invalid usage produces an error, never an invented zero.
+**Cache tokens.** Claude Code sends a large, cached system prompt with every request, about 28–38k tokens in our checks with Claude Code 2.1.270. Canopy counts cache reads and cache writes at the **full input rate**. That is a conservative choice: serving a cache hit likely costs less energy than fresh prefill, but no published factor quantifies it. As a result, short prompts are dominated by this fixed overhead. A one-line Haiku answer is about 2.5 Wh here, most of it cached context. Treat per-run figures as upper-bound estimates. The relative comparison with Opus is unaffected, because the baseline uses the same tokens.
 
-Session totals cover completed requests, including classifier cost and negative savings. Failed/disconnected attempts may use resources without a complete response and are excluded: this is not a billing ledger. Both SDKs have retries disabled. No prompt/answer database exists; local storage holds request count, routed/baseline energy sums and factor version.
+**Baseline.** The baseline uses the **same token counts** at Opus factors, with no classifier and no second run. Opus is assumed to do similar-length work. Answer quality, length, tool use and reasoning are not compared experimentally.
 
-Training, hardware manufacturing, user devices, networking and app hosting are excluded. The factors omit variation in hardware, batching, serving efficiency, grid/time/location, long-context decoding and water use. No confidence interval is claimed. The classifier can also make routing mistakes. These figures support exploring tradeoffs, not regulatory reporting or lifecycle assessment.
+**Classifier.** Gemini input includes system/schema overhead reported by the API. Output includes candidate and reported thinking tokens; 2.5 thinking is disabled. A primary-model 404 can trigger the pinned fallback. Missing or invalid usage from either provider produces an error, never an invented zero.
+
+**Failures.** Failed, cancelled, dry-run, or unreported runs are shown but excluded from totals, even though they may have used resources. Runs that never report back are marked failed after an hour. This is not a billing ledger. The server keeps numeric activity in memory only. The browser stores counts, energy sums, counted routing IDs and the factor version, never prompts or answers.
+
+Training, hardware manufacturing, user devices, networking and app hosting are excluded. The factors omit variation in hardware, batching, serving efficiency, cache economics, grid, time, location and water use. No confidence interval is claimed. The classifier can also make routing mistakes. These figures support exploring tradeoffs, not regulatory reporting or lifecycle assessment.

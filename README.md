@@ -1,105 +1,115 @@
 # Canopy · Climate Hackathon 2026
 
-A carbon-aware model router: ask a question, get a Claude answer, and compare its **estimated** impact with always using Opus. Gemini Flash Lite chooses the smallest suitable model. The comparison is calculated from token counts; it never generates a second answer.
+A carbon-aware launcher for **your own Claude Code**. Type a prompt with `canopy`. Gemini Flash Lite picks the smallest suitable Claude model, your installed Claude Code runs it with your normal sign-in, and a local dashboard compares the run's **estimated** impact with always using Opus. The comparison is calculated from token counts; no second answer is generated.
+
+> Canopy does not intercept the Claude website or desktop app. Prompts go through the `canopy` terminal command.
 
 ## Run locally
 
-Use Node.js 22+ and npm.
+Needs Node.js 22+, npm, and [Claude Code](https://code.claude.com/docs) installed and signed in (`claude` on your PATH; run it once and use `/login`).
 
 ```sh
 npm ci
-cp .env.example .env.local
+cp .env.example .env.local   # then set GEMINI_API_KEY
+npm run build && npm start   # dashboard + API at http://127.0.0.1:3000
 ```
 
-Fill in `GEMINI_API_KEY` and `ANTHROPIC_API_KEY` in `.env.local`. Get keys from [Google AI Studio](https://aistudio.google.com/apikey) and the [Anthropic console](https://console.anthropic.com/). Both accounts need quota and access to the pinned models. Keys are server-only; never use `NEXT_PUBLIC_` prefixes. `.env.local` is ignored by Git.
+Get a Gemini key from [Google AI Studio](https://aistudio.google.com/apikey). It stays on the local server and never reaches Claude Code. No Anthropic API key is needed. Restart after changing `.env.local`. (`npm run dev` also works where file watching is allowed.)
 
-Then one command runs both the UI and API:
+In another terminal, from this folder:
 
 ```sh
-npm run dev
+npm run ask -- "Explain why leaves change color in autumn."
+echo "Summarize this" | npm run ask
+npm run ask -- --dry-run "Design a fault-tolerant carbon ledger"   # routing only, no Claude usage
 ```
 
-Open <http://127.0.0.1:3000>. Restart after changing keys. The UI works without credentials; submission returns a setup error and makes no provider calls if either key is missing.
+Or install the command globally with `npm link`, then run `canopy "…"`.
 
-For production: `npm run build`, then `npm start`.
+The answer prints to stdout; Canopy's routing and impact notes print to stderr, so answers can be piped. Open <http://127.0.0.1:3000> to watch runs arrive.
+
+### Launcher options
+
+| Option | Meaning |
+| --- | --- |
+| `--resume <session-id>` | Continue a Claude Code session (the ID is printed after each run) |
+| `--continue` | Continue the most recent Claude Code session in this folder |
+| `--allowed-tools "Read Grep"` | Tools Claude Code may use without asking |
+| `--server <url>` | Canopy server; must be localhost (default `http://127.0.0.1:3000`, or `$CANOPY_URL`) |
+| `--dry-run` | Show the routing decision without running Claude Code |
+
+**Permissions.** The launcher runs `claude -p --model <selected> --output-format json --permission-prompts none`. Headless mode has no one to answer permission prompts, so anything that would prompt is **denied**, and your permission mode and settings still apply. Pre-approve specific tools with `--allowed-tools` or your Claude Code settings. Canopy never passes `--dangerously-skip-permissions`.
+
+**Cost.** Runs count against your own Claude Code plan or API billing, exactly as if you ran `claude -p` yourself. Check your plan's terms for programmatic use.
 
 ## Architecture
 
-One Next.js App Router + TypeScript app with Tailwind/CSS. Official SDKs `@google/genai` and `@anthropic-ai/sdk` execute in server-only modules. No database.
-
 ```mermaid
 flowchart LR
-  prompt[Original prompt] --> api[POST /api/route]
-  api --> classifier[Gemini Flash Lite]
-  classifier --> tier{Complexity}
-  tier -->|light| haiku[Haiku 4.5]
-  tier -->|medium| sonnet[Sonnet 5]
-  tier -->|heavy| opus[Opus 5]
-  haiku --> impact[Impact engine]
-  sonnet --> impact
-  opus --> impact
-  classifier -. token usage .-> impact
-  impact --> ui[Answer + vs-Opus dashboard]
+  user[canopy CLI] -->|prompt| route[POST /api/route]
+  route --> gemini[Gemini Flash Lite]
+  gemini -->|tier + reason| route
+  route -->|routing ID + model| user
+  user -->|prompt via stdin, --model| claude[Your Claude Code]
+  claude -->|answer + modelUsage JSON| user
+  user -->|token counts only| usage[POST /api/usage]
+  usage --> store[(in-memory activity)]
+  store --> session[GET /api/session]
+  session --> ui[Dashboard, polls every 2s]
 ```
 
-- `lib/config.ts`: pinned model IDs and request limits. No user override.
-- `lib/classify.ts`: structured Gemini JSON (`tier`, `reason`); prefers light, reserves medium for reasoning/coding/multi-step work and heavy for tasks whose quality would clearly suffer otherwise. The prompt is task data, not routing instructions.
-- `lib/generate.ts`: sends the original, unchanged prompt to Claude and records usage. Capped at 4,096 output tokens; truncated answers are labeled.
-- `app/api/route/route.ts`: validates input, preflights both keys, sequences providers, returns the answer and impact. No automatic retries or escalation to Opus on failure.
-- `lib/factors.ts` / `lib/impact.ts`: versioned assumptions and pure calculations.
-- `lib/session.ts`: numeric totals in `localStorage`, namespaced by methodology version; reset starts a new session. Prompts/answers are not stored.
-- `app/page.tsx`: prompt, Markdown answer, route/reason, footprint comparison and cumulative savings. Responsive layout, keyboard controls, status announcements, reduced motion.
+- `cli/canopy.mjs`: the launcher. Uses `spawn` with an argument array (no shell). Passes the prompt through stdin. Strips `GEMINI_API_KEY` and `CANOPY_*` from Claude Code's environment. `cli/lib.mjs` has the pure, tested helpers.
+- `app/api/route`: localhost-only. Validates the prompt, classifies it with Gemini, and records a routing decision. `/api/classify` is an alias. No generation happens here.
+- `app/api/usage`: accepts per-model token counts, or a failure, for a routing ID. It is idempotent and computes impact from the models Claude Code actually reported.
+- `app/api/session`: the configuration flag plus the latest 100 runs. Holds numbers and routing only; prompts and answers are never stored or sent here.
+- `lib/activity.ts`: an in-memory store with at most 200 runs. Runs still pending after an hour are marked failed. It resets when the server restarts. There is no database.
+- `lib/classify.ts`, `lib/factors.ts`, `lib/impact.ts`: the classifier, frozen factors, and pure calculations.
+- `lib/session.ts`: browser totals in `localStorage`. They are deduplicated by routing ID, so polling and reloads never double count. Reset keeps the counted IDs.
+- `app/page.tsx`: the dashboard, with setup status, recent runs, per-model token breakdown, the vs-Opus comparison, and cumulative totals.
+- All API routes reject non-localhost hosts and cross-origin browser requests and send `Cache-Control: no-store`.
 
 ## Model map
 
-- Classifier: `gemini-2.5-flash-lite`.
-- Missing/retired classifier fallback: `gemini-3.1-flash-lite-preview`, **only** after a 404. Its usage is counted and the UI discloses the change. Other failures stop the request.
-- Light: `claude-haiku-4-5`.
-- Medium: `claude-sonnet-5`.
-- Heavy and fixed baseline: `claude-opus-5`.
+- Classifier: `gemini-2.5-flash-lite`. The fallback `gemini-3.1-flash-lite-preview` is used **only** after a 404. **Note:** Google retired that preview on May 25, 2026 and recommends `gemini-3.1-flash-lite`. Updating `lib/config.ts` is pending a team decision.
+- Light `claude-haiku-4-5`, medium `claude-sonnet-5`, heavy and fixed baseline `claude-opus-5`.
+- Claude Code may use additional models in a run, for example for subagents or background tasks, or it may substitute one. The dashboard shows every model it reported and flags a mismatch. Impact uses the reported models. A model family with no factor is rejected rather than guessed.
 
-References: [Claude models](https://platform.claude.com/docs/en/models/overview), [Gemini Flash Lite](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite), [Gemini deprecations](https://ai.google.dev/gemini-api/docs/deprecations). The project brief flags October 20, 2026 for 2.5 retirement; verify the provider schedule before deployment. Availability also depends on the API account. Update config deliberately if the preview retires; do not silently substitute another family.
+References: [Claude models](https://platform.claude.com/docs/en/models/overview), [Claude Code headless mode](https://code.claude.com/docs/en/headless), [Gemini deprecations](https://ai.google.dev/gemini-api/docs/deprecations).
 
 ## API
 
 ```sh
-curl http://127.0.0.1:3000/api/route \
-  -H 'Content-Type: application/json' \
-  -d '{"prompt":"Explain why leaves change color in autumn."}'
+curl -s http://127.0.0.1:3000/api/route -H 'Content-Type: application/json' -d '{"prompt":"Explain leaves."}'
+curl -s http://127.0.0.1:3000/api/usage -H 'Content-Type: application/json' \
+  -d '{"id":"<routing id>","status":"completed","durationMs":2300,"models":[{"model":"claude-haiku-4-5","inputTokens":10,"outputTokens":45,"cacheReadInputTokens":28381,"cacheCreationInputTokens":9317}]}'
+curl -s http://127.0.0.1:3000/api/session
 ```
 
-`POST { "prompt": string }` returns:
+- `POST /api/route {prompt}` returns `{id, createdAt, routing, usage.classifier, classifierImpact, methodologyVersion}`.
+- `POST /api/usage` takes `{id, status: "completed", models, durationMs}`, or `{id, status: "failed", reason}`, where `reason` is one of `cli_error`, `missing_usage`, `cancelled`, `launch_failed`, `dry_run`. A completed report returns the full `RouteResult` with impact.
+- `GET /api/session` returns `{configured, activities}`.
 
-- `answer`: Claude text, rendered as Markdown with raw HTML disabled.
-- `routing`: tier, reason, selected model ID/name, classifier ID/fallback flag, baseline ID.
-- `usage`: classifier, generation, and total input/output token counts.
-- `impact`: generation, classifier, routed, baseline, signed savings, percent savings, methodology version. Footprints contain Wh, g CO₂e, liters, gasoline gallons, tree-years, and tree-minutes.
-- `truncated`: whether the answer hit its output cap.
-
-Prompts must be nonblank strings of at most 20,000 characters. Whitespace is preserved for both providers. Errors return `{ "error": { "code", "message", "stage" } }`: 400/413/415 for invalid requests, 503 for missing keys, 429 for provider rate limits, 502 for provider/access/output failures, 504 for recognized timeouts. Raw upstream error text is never exposed. Responses are `Cache-Control: no-store`.
+Errors return `{ "error": { "code", "message", "stage" } }` with status 400/413/415 for invalid input, 403 for a non-local request, 404 for an unknown ID, 409 for a run already failed, 422 for an unsupported model, 429/502/504 for classifier problems, and 503 for a missing key. Raw provider errors are never exposed.
 
 ## Methodology
 
-Routed impact includes **classification + one answer**. The baseline applies Opus factors to the same generation tokens, **without a classifier**. It assumes a similar-length answer; equal quality is not established. Choosing Opus adds classifier overhead and shows extra impact. Classification can also outweigh savings for a very short Haiku answer.
-
-The Sonnet reference is 0.000135 Wh/input token and 0.00288 Wh/output token. Scales: Haiku 0.5×, Sonnet 1×, Opus 2×, classifier 0.25×. Conversions: 0.287 g CO₂e/Wh, a prototype water assumption of 1.8 L/kWh, 8,887 g CO₂/gallon gasoline, 60,000 g CO₂/tree-year. See [METHODOLOGY.md](./METHODOLOGY.md) for provenance, equations, a worked example and limitations.
-
-Session savings are summed baseline impact minus summed routed impact. The percentage is calculated from these sums, **not** averaged request percentages. Completed requests only are counted; failed/abandoned attempts may still use resources. Totals persist locally until reset or browser data is cleared. If storage fails, the UI keeps in-memory totals and discloses this.
+Routed impact = classifier + **everything Claude Code reported for the run**, summed per model. Cache reads and cache writes count as full input tokens. The Opus baseline applies Opus factors to the same tokens, without a classifier. Choosing Opus, or a run where Claude Code itself used Opus, shows extra impact. See [METHODOLOGY.md](./METHODOLOGY.md) for factors, equations, the worked example, and limitations, including why Claude Code's cached system prompt dominates short runs.
 
 ## Verification
 
 ```sh
-npm run check                # lint, TypeScript, tests, production build
-npx playwright install chromium
-npm run test:e2e             # isolated browser/HTTP tests at port 3100
+npm run check                                     # lint, TypeScript, unit tests, production build
+PLAYWRIGHT_CHROME_CHANNEL=chrome npm run test:e2e # or `npx playwright install chromium` first
 ```
 
-With existing Chrome, use `PLAYWRIGHT_CHROME_CHANNEL=chrome npm run test:e2e` instead of installing Chromium. Integration tests exercise real SDK serialization with intercepted HTTP. Browser tests intercept route responses; separate HTTP tests exercise server validation and missing keys. These tests spend no API credits and do not prove live access or classifier accuracy. Live checks require both real keys.
+- Unit tests cover the API contract with the real Gemini SDK over intercepted HTTP, and the activity store (idempotency, expiry, bounds).
+- They also cover impact math, including the golden example, cache accounting, and mixed models, plus session deduplication.
+- The real launcher is tested end to end against a fake `claude` (`tests/fixtures/fake-claude.mjs`) and a fake server. That covers stdin prompts, no shell interpolation, environment scrubbing, login errors, missing usage, malformed output, a missing executable, Ctrl-C, and dry runs.
+- Browser tests exercise the dashboard with mocked `/api/session` data, and the real HTTP endpoints without a key.
+- None of these tests spend provider credits. Live use needs a Gemini key and a signed-in Claude Code.
 
-Coverage includes the 1k/1k Sonnet ballpark, conversions, classifier overhead, all tiers, negative savings, zero baselines, invalid usage, prompt preservation, one generation call, fallback boundaries, sanitized failures, persistence/reset, loading/retry, mobile layout and safe Markdown. CI runs checks and browser tests.
+## Scope
 
-## Scope and collaboration
+V1 is single-user and local: no auth, no database, no backend history, no web chat. Gemini and your Claude Code both receive the prompt. The dashboard only ever sees token counts.
 
-V1 has no auth, streaming, user model override, non-Claude generation, database, or backend history. Both providers receive the prompt. The default server binds to localhost; public operation with paid keys needs access control and spending limits.
-
-Create a branch from `main` and open a pull request to collaborate. License: TBD.
+Collaborate on a branch from `main` via pull request. License: TBD.
