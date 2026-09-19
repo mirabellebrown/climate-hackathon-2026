@@ -67,6 +67,12 @@ export interface RouteResult {
   modelMismatch: boolean;
 }
 
+export interface ChatReply {
+  answer: string;
+  sessionId: string | null;
+  result: RouteResult;
+}
+
 export interface Activity {
   id: string;
   createdAt: string;

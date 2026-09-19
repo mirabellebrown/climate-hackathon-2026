@@ -1,8 +1,8 @@
 # Canopy · Climate Hackathon 2026
 
-A carbon-aware launcher for **your own Claude Code**. Type a prompt with `canopy`. Gemini Flash Lite picks the smallest suitable Claude model, your installed Claude Code runs it with your normal sign-in, and a local dashboard compares the run's **estimated** impact with always using Opus. The comparison is calculated from token counts; no second answer is generated.
+A carbon-aware chat for **your own Claude Code**. Chat in the web page. Each message is classified by Gemini Flash Lite and routed to the smallest suitable Claude model. Your installed Claude Code answers it in the background, with your normal sign-in and its tools switched off. Next to the conversation, Canopy compares each answer's **estimated** impact with always using Opus. The comparison is calculated from token counts; no second answer is generated.
 
-> Canopy does not intercept the Claude website or desktop app. Prompts go through the `canopy` terminal command.
+A `canopy` terminal command runs the same router for people who prefer the terminal. It uses your full Claude Code setup, and its runs count in the same totals.
 
 ## Run locally
 
@@ -15,6 +15,14 @@ npm run build && npm start   # dashboard + API at http://127.0.0.1:3000
 ```
 
 Get a Gemini key from [Google AI Studio](https://aistudio.google.com/apikey). It stays on the local server and never reaches Claude Code. No Anthropic API key is needed. Restart after changing `.env.local`. (`npm run dev` also works where file watching is allowed.)
+
+Open <http://127.0.0.1:3000> and start chatting. Follow-up messages continue the same Claude Code conversation, even when they're routed to a different model. **New chat** starts a fresh one.
+
+### Chat mode
+
+The server runs `claude -p --model <selected> --output-format json --tools "" --strict-mcp-config` in an empty temporary folder, adding `--resume <session>` for follow-ups. With no tools, no MCP servers and no project files, a web page can never read files or run commands on your machine. It also keeps Claude Code's per-message overhead small: about 7k tokens, versus about 30k with tools. Conversations live in the page and in Claude Code's own session store; reloading the page starts a new chat.
+
+### Terminal launcher
 
 In another terminal, from this folder:
 
@@ -59,14 +67,15 @@ flowchart LR
 ```
 
 - `cli/canopy.mjs`: the launcher. Uses `spawn` with an argument array (no shell). Passes the prompt through stdin. Strips `GEMINI_API_KEY` and `CANOPY_*` from Claude Code's environment. `cli/lib.mjs` has the pure, tested helpers.
+- `app/api/chat` + `lib/claude-code.ts`: the web chat. Validates the prompt and optional session ID, classifies, runs tool-less Claude Code, and returns the answer plus impact. Only numbers go to the activity store.
 - `app/api/route`: localhost-only. Validates the prompt, classifies it with Gemini, and records a routing decision. `/api/classify` is an alias. No generation happens here.
 - `app/api/usage`: accepts per-model token counts, or a failure, for a routing ID. It is idempotent and computes impact from the models Claude Code actually reported.
 - `app/api/session`: the configuration flag plus the latest 100 runs. Holds numbers and routing only; prompts and answers are never stored or sent here.
 - `lib/activity.ts`: an in-memory store with at most 200 runs. Runs still pending after an hour are marked failed. It resets when the server restarts. There is no database.
 - `lib/classify.ts`, `lib/factors.ts`, `lib/impact.ts`: the classifier, frozen factors, and pure calculations.
 - `lib/session.ts`: browser totals in `localStorage`. They are deduplicated by routing ID, so polling and reloads never double count. Reset keeps the counted IDs.
-- `app/page.tsx`: the dashboard, with setup status, recent runs, per-model token breakdown, the vs-Opus comparison, and cumulative totals.
-- All API routes reject non-localhost hosts and cross-origin browser requests and send `Cache-Control: no-store`.
+- `app/page.tsx`: the chat UI, with routing badge and reason on each reply, Markdown answers, per-reply impact (click to inspect), cumulative totals, and the methodology.
+- All API routes check the real `Host` header (Next normalizes `request.url`), which blocks DNS rebinding. They reject cross-origin browser requests and send `Cache-Control: no-store`.
 
 ## Model map
 
@@ -110,6 +119,6 @@ PLAYWRIGHT_CHROME_CHANNEL=chrome npm run test:e2e # or `npx playwright install c
 
 ## Scope
 
-V1 is single-user and local: no auth, no database, no backend history, no web chat. Gemini and your Claude Code both receive the prompt. The dashboard only ever sees token counts.
+V1 is single-user and local: no auth, no database, no server-side chat history, no streaming, and no tools in chat mode. Gemini and your Claude Code both receive the prompt. The dashboard only ever sees token counts.
 
 Collaborate on a branch from `main` via pull request. License: TBD.

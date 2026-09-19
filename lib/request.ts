@@ -2,7 +2,7 @@ import "server-only";
 import { MAX_PROMPT_LENGTH } from "./config";
 import { RouteFailure } from "./errors";
 
-export async function readPrompt(request: Request): Promise<string> {
+export async function readPromptBody(request: Request): Promise<{ prompt: string; body: Record<string, unknown> }> {
   if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
     throw new RouteFailure("INVALID_CONTENT_TYPE", "Send a JSON body containing a prompt.", 415, "request");
   }
@@ -14,7 +14,11 @@ export async function readPrompt(request: Request): Promise<string> {
     throw new RouteFailure("INVALID_PROMPT", "Enter a prompt before routing your request.", 400, "request");
   }
   if (body.prompt.length > MAX_PROMPT_LENGTH) throw new RouteFailure("PROMPT_TOO_LONG", `Keep your prompt under ${MAX_PROMPT_LENGTH.toLocaleString("en-US")} characters.`, 413, "request");
-  return body.prompt;
+  return { prompt: body.prompt, body: body as Record<string, unknown> };
+}
+
+export async function readPrompt(request: Request): Promise<string> {
+  return (await readPromptBody(request)).prompt;
 }
 
 export function requireKeys(keys: string[]) {

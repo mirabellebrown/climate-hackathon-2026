@@ -139,6 +139,9 @@ describe("POST /api/route (classification only)", () => {
     expect((await route(request("Hi", { host: "http://evil.example" }))).status).toBe(403);
     expect((await route(request("Hi", { origin: "http://evil.example" }))).status).toBe(403);
     expect((await route(request("Hi", { origin: LOCAL }))).status).toBe(200);
+    expect((await route(request("Hi", { origin: "http://localhost:3000" }))).status).toBe(403);
+    const rebound = new Request(`${LOCAL}/api/route`, { method: "POST", headers: { "Content-Type": "application/json", Host: "attacker.example:3000" }, body: JSON.stringify({ prompt: "Hi" }) });
+    expect((await route(rebound)).status).toBe(403);
   });
 });
 

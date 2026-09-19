@@ -48,7 +48,7 @@ export function ImpactPanel({ result, loading }: { result: RouteResult | null; l
         <div className="contour-leaf"><Leaf size={38} strokeWidth={1.2} /></div>
       </div>
       <h3>{loading ? "Finding a thoughtful fit." : "Small choices. Smaller footprints."}</h3>
-      <p>{loading ? "Claude Code is running in your terminal. The comparison will appear when it reports its usage." : "Run a prompt with canopy to see how its estimated footprint compares with using our largest model every time."}</p>
+      <p>{loading ? "Claude Code is working on it in the background. The comparison appears with the answer." : "Send a message to see how its estimated footprint compares with using our largest model every time."}</p>
       <div className="empty-units"><span><Zap size={14} />Energy</span><span><Leaf size={14} />Carbon</span><span><Droplets size={14} />Water</span></div>
     </div>}
     <div className="baseline-note"><Info size={16} /><p><strong>A comparison without a second call.</strong> Opus is estimated from the same Claude Code token counts, assuming similar-length work. The baseline has no classifier cost.</p></div>
