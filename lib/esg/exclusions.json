@@ -1,0 +1,54 @@
+{
+  "exclusions_version": "2026-09-19.1",
+  "exclusions": [
+    {
+      "id": "training",
+      "title": "Training-phase emissions",
+      "statement": "Emissions from training the models are not included. EcoLogits covers inference only; allocating training to each request would need separate amortization modelling, which is not performed.",
+      "affects": ["ESRS E1-6", "GRI 305-3", "IFRS S2 para 29"],
+      "remediation": "Request training-emissions disclosures from each provider and report them separately if they publish them."
+    },
+    {
+      "id": "network",
+      "title": "Network and data-transit emissions",
+      "statement": "Emissions from carrying data between your users and the data center are outside the boundary.",
+      "affects": ["ESRS E1-6", "GRI 305-3"],
+      "remediation": "Estimate network emissions with your own network or telecom methodology if material."
+    },
+    {
+      "id": "end_user_device",
+      "title": "End-user device energy",
+      "statement": "Energy used by the laptops, phones and browsers that send prompts and read answers is outside the boundary.",
+      "affects": ["GRI 302-2", "ESRS E1-6"],
+      "remediation": "Cover device energy through your own-operations (Scope 1 and 2) inventory."
+    },
+    {
+      "id": "embodied_water",
+      "title": "Embodied water in hardware manufacturing",
+      "statement": "Water used to manufacture servers and GPUs is not computed. This is an acknowledged data gap in the EcoLogits methodology.",
+      "affects": ["ESRS E3-3", "GRI 303-3"],
+      "remediation": "Request manufacturing water data from hardware and cloud providers."
+    },
+    {
+      "id": "end_of_life",
+      "title": "End-of-life and e-waste",
+      "statement": "Disposal and recycling of hardware is excluded for lack of recycling-rate data.",
+      "affects": ["ESRS E1-6", "GRI 305-3"],
+      "remediation": "Request end-of-life data from providers as it becomes available."
+    },
+    {
+      "id": "prefill",
+      "title": "Input-token (prefill) energy",
+      "statement": "Energy for processing prompts is not yet modelled, so long-context, retrieval (RAG) and coding workloads are understated. Reference point: 10,000 input tokens can raise consumption by roughly 8x.",
+      "affects": ["GRI 302-2", "ESRS E1-6", "GRI 305-3"],
+      "remediation": "Track input-to-output ratios; this warning fires automatically for teams whose average exceeds 5."
+    },
+    {
+      "id": "market_based",
+      "title": "Market-based Scope 2",
+      "statement": "Figures use national-average, location-based grid mixes. Power purchase agreements and renewable-energy certificates are not accounted for.",
+      "affects": ["ESRS E1-6", "GRI 305-3", "IFRS S2 para 29"],
+      "remediation": "If a provider publishes market-based data, register it as a supplier-specific figure and report it separately."
+    }
+  ]
+}
