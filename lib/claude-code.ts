@@ -23,11 +23,23 @@ export function chatArgs(model: string, sessionId?: string): string[] {
   return args;
 }
 
-export function runChat(prompt: string, model: string, sessionId?: string): Promise<ChatRun> {
+/**
+ * Routing on Claude Code alone, for someone who brought no API key. The system prompt is
+ * replaced rather than appended, so the classifier reads a few hundred tokens instead of the
+ * full coding prompt, and the run is never resumed so it cannot see the conversation.
+ */
+export function classifierArgs(model: string, instruction: string): string[] {
+  return ["-p", "--model", model, "--output-format", "json", "--permission-prompts", "none",
+    "--tools", "", "--strict-mcp-config", "--system-prompt", instruction];
+}
+
+export const runChat = (prompt: string, model: string, sessionId?: string) => runClaude(chatArgs(model, sessionId), prompt);
+
+export function runClaude(args: string[], prompt: string): Promise<ChatRun> {
   mkdirSync(CHAT_DIR, { recursive: true });
   const started = Date.now();
   return new Promise((resolve, reject) => {
-    const child = spawn(process.env.CANOPY_CLAUDE_BIN || "claude", chatArgs(model, sessionId), {
+    const child = spawn(process.env.CANOPY_CLAUDE_BIN || "claude", args, {
       cwd: CHAT_DIR, env: childEnv(process.env), stdio: ["pipe", "pipe", "ignore"],
     });
     let stdout = "";

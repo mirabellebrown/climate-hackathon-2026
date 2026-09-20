@@ -11,6 +11,12 @@ if (process.env.FAKE_CLAUDE_LOG) {
 const model = process.argv[process.argv.indexOf("--model") + 1];
 const usage = (name) => ({ inputTokens: 12, outputTokens: 300, cacheReadInputTokens: 1000, cacheCreationInputTokens: 500, webSearchRequests: 0, costUSD: 0.01, canonicalModel: name });
 const base = { type: "result", subtype: "success", is_error: false, duration_ms: 4321, num_turns: 1, session_id: "11111111-2222-3333-4444-555555555555", permission_denials: [] };
+// Routing runs with the system prompt replaced, and must answer with the classifier's JSON.
+const system = process.argv[process.argv.indexOf("--system-prompt") + 1] ?? "";
+if (system.includes("classify task complexity")) {
+  console.log(JSON.stringify({ ...base, result: JSON.stringify({ tier: process.env.FAKE_CLAUDE_TIER ?? "light", reason: "A short everyday question." }), modelUsage: { [model]: usage(model) } }));
+  process.exit(0);
+}
 switch (process.env.FAKE_CLAUDE_MODE) {
   case "login":
     console.log(JSON.stringify({ ...base, subtype: "success", is_error: true, result: "Not logged in · Please run /login" }));

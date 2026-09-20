@@ -1158,4 +1158,10 @@ h1 {
 .keys-field small a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .keys-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .keys-saved { font-size: 12px; color: var(--ink-muted-48); }
+.bridge-section { margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--hairline); }
+.bridge-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--space-sm); font-size: 15px; font-weight: 600; }
+.bridge-section .keys-lede { margin-top: 0; }
+.bridge-section code { font-size: 13px; background: var(--surface-pearl); border: 1px solid var(--hairline); border-radius: 5px; padding: 1px 5px; }
+.bridge-live { margin: 0 0 var(--space-lg); font-size: 14px; line-height: 1.6; color: var(--ink); }
+.bridge-live .link-button { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
 .link-button { background: none; border: none; padding: 0; color: var(--primary); font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }

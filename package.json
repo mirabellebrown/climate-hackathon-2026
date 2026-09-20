@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
-    "ask": "node cli/canopy.mjs"
+    "ask": "node cli/canopy.mjs",
+    "pair": "node scripts/pair.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.127.0",
