@@ -105,6 +105,9 @@ How it is kept safe:
   else planted cannot aim your prompts at their machine.
 - Chat still runs Claude Code with tools off, in an empty directory, so a web page can never
   read your files or run commands.
+- A key in your own `.env.local` still wins for routing, because that is what you configured.
+  If that key is stale the paired chat fails at the classification step; clear it, or fix it,
+  to let Claude Code route as well as answer.
 - Browsers guard this deliberately. Chrome 153 blocks a public site from reaching loopback
   until the person grants **Local Network Access**; the request never leaves the browser
   otherwise. We also send `Access-Control-Allow-Private-Network` for older Chrome, which

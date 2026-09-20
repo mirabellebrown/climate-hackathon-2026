@@ -160,14 +160,23 @@ test("storage failures keep the chat usable", async ({ page }) => {
 
 test("real HTTP endpoints validate input, need a key, and stay local", async ({ request }) => {
   for (const path of ["/api/route", "/api/chat"]) {
-    const missing = await request.post(path, { data: { prompt: "Hello" } });
-    expect(missing.status()).toBe(503);
-    expect((await missing.json()).error.message).toMatch(/GEMINI_API_KEY or ANTHROPIC_API_KEY/);
     expect((await (await request.post(path, { data: { prompt: " " } })).json()).error.code).toBe("INVALID_PROMPT");
     expect((await request.post(path, { data: { prompt: "Hello" }, headers: { Origin: "http://evil.example" } })).status()).toBe(403);
   }
+  // The launcher's classify-only endpoint still needs a key; chat falls back to Claude Code.
+  const missing = await request.post("/api/route", { data: { prompt: "Hello" } });
+  expect(missing.status()).toBe(503);
+  expect((await missing.json()).error.message).toMatch(/GEMINI_API_KEY or ANTHROPIC_API_KEY/);
+  const noKey = await request.post("/api/chat", { data: { prompt: "Hello" } });
+  expect(noKey.status()).toBe(200);
+  expect((await noKey.json()).result.routing.classifierModel).toContain("claude");
+  // A page this app was never paired with cannot preflight its way in.
+  expect((await request.fetch("/api/chat", { method: "OPTIONS", headers: { Origin: "https://evil.example" } })).status()).toBe(403);
   expect((await request.post("/api/chat", { data: { prompt: "Hello", sessionId: "bad" } })).status()).toBe(400);
-  expect(await (await request.get("/api/session")).json()).toEqual({ configured: false, mode: "local", serverKeys: { gemini: false, anthropic: false }, activities: [] });
+  const session = await (await request.get("/api/session")).json();
+  expect(session).toMatchObject({ configured: false, mode: "local", serverKeys: { gemini: false, anthropic: false } });
+  // The store keeps numbers from that run, never the conversation.
+  expect(JSON.stringify(session.activities)).not.toContain("Hello");
 });
 
 test("loads demo data without calling a model, and fills the gauge and emoji strip", async ({ page }) => {

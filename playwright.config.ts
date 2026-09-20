@@ -1,4 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import { fileURLToPath } from "node:url";
+
+// Stand-in for `claude`, so an end-to-end run never calls a real model.
+const FAKE_CLAUDE = fileURLToPath(new URL("./tests/fixtures/fake-claude.mjs", import.meta.url));
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -12,7 +16,7 @@ export default defineConfig({
     command: "npm run build && npm run start -- --port 3100",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: false,
-    env: { NEXT_TELEMETRY_DISABLED: "1", GEMINI_API_KEY: "", CANOPY_ESG_DIR: "test-results/esg-empty" },
+    env: { NEXT_TELEMETRY_DISABLED: "1", GEMINI_API_KEY: "", ANTHROPIC_API_KEY: "", CANOPY_CLAUDE_BIN: FAKE_CLAUDE, CANOPY_ESG_DIR: "test-results/esg-empty" },
     timeout: 120_000,
   },
 });
