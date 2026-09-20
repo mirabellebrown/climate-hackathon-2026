@@ -39,11 +39,19 @@ function SiteHeader({ onKeys, keysNeeded, bridged }: { onKeys: () => void; keysN
   </header>;
 }
 
+const PAIR_COMMANDS = `git clone https://github.com/mirabellebrown/climate-hackathon-2026
+cd climate-hackathon-2026 && npm install && npm run pair`;
+
 /** Connect this page to the copy of Canopy running on the visitor's own machine. */
 function BridgeSection({ bridge }: { bridge: Bridge | null }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function copyCommands() {
+    try { await navigator.clipboard.writeText(PAIR_COMMANDS); setCopied(true); } catch { setCopied(false); }
+  }
 
   async function connect() {
     const parsed = parseConnectCode(code);
@@ -62,7 +70,17 @@ function BridgeSection({ bridge }: { bridge: Bridge | null }) {
     {bridge
       ? <p className="bridge-live" data-testid="bridge-connected">Connected to <code>{bridge.url}</code>. Prompts go straight from this browser to your machine — this server never sees them.
           <button type="button" className="link-button" onClick={() => { saveBridge(null); setStatus("Disconnected."); }} data-testid="disconnect-bridge"><Unplug size={13} />Disconnect</button></p>
-      : <p className="keys-lede">Run <code>npm run pair</code> in your own copy of this app, then paste the code it prints. Your prompts never touch this server, and you need no API key at all.</p>}
+      : <div className="bridge-setup">
+          <p className="keys-lede">This runs the app on <em>your</em> machine, so your prompts never touch this server and you need no API key at all. You will need <strong>Node 22 or newer</strong> and <strong>Claude Code installed and signed in</strong> — run <code>claude</code> once and use <code>/login</code>. Without it, pairing still starts and then fails at your first prompt.</p>
+          <div className="bridge-commands">
+            <div className="bridge-commands-head">
+              <span>Run on your machine</span>
+              <button type="button" className="copy-button" onClick={copyCommands} aria-label="Copy the setup commands" data-testid="copy-bridge-commands">{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? "Copied" : "Copy"}</button>
+            </div>
+            <pre data-testid="bridge-commands"><code>{PAIR_COMMANDS}</code></pre>
+          </div>
+          <p className="keys-lede">Then paste the code it prints below and press Connect.</p>
+        </div>}
     <label className="keys-field">
       <span>Pairing code <em>· from `npm run pair` on your machine</em></span>
       <input type="text" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} placeholder="http://127.0.0.1:3000#…" data-testid="bridge-code" />

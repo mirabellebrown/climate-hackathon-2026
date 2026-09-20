@@ -199,6 +199,20 @@ test("loads demo data without calling a model, and fills the gauge and emoji str
   expect(calls).toBe(0);
 });
 
+test("tells an unconnected visitor how to get a copy of the app to pair with", async ({ page }) => {
+  await page.route("**/api/session", (route) => route.fulfill({ json: { configured: false, mode: "hosted", serverKeys: { gemini: false, anthropic: false }, activities: [] } }));
+  await page.goto("/");
+  await page.getByTestId("open-keys").click();
+  // A visitor on the deployed site has no copy of the app, so the panel hands them the commands.
+  const commands = page.getByTestId("bridge-commands");
+  await expect(commands).toContainText("git clone https://github.com/mirabellebrown/climate-hackathon-2026");
+  await expect(commands).toContainText("npm install && npm run pair");
+  await expect(page.getByTestId("copy-bridge-commands")).toBeVisible();
+  // Claude Code is the prerequisite that otherwise fails only at the first prompt.
+  await expect(page.locator(".bridge-setup")).toContainText("Claude Code installed and signed in");
+  await expect(page.locator(".bridge-setup")).toContainText("Node 22 or newer");
+});
+
 test("hosted mode asks for a key, keeps the demo usable, and sends the key it is given", async ({ page }) => {
   await page.route("**/api/session", (route) => route.fulfill({ json: { configured: false, mode: "hosted", serverKeys: { gemini: false, anthropic: false }, activities: [] } }));
   const seen: (string | undefined)[] = [];
