@@ -1,6 +1,7 @@
 import { createDecision } from "@/lib/activity";
 import { classify, classifyWithClaude } from "@/lib/classify";
 import { BASELINE_MODEL, MODELS } from "@/lib/config";
+import { RouteFailure } from "@/lib/errors";
 import { FACTORS } from "@/lib/factors";
 import { energyForTokens, footprintFromEnergy } from "@/lib/impact";
 import { errorResponse, NO_STORE, requireLocalRequest } from "@/lib/local-api";
@@ -19,6 +20,10 @@ export async function POST(request: Request): Promise<Response> {
     requireLocalRequest(request);
     const prompt = await readPrompt(request);
     const { classifier } = pickVendors(keysFor(request));
+    // The launcher's classify-only API stays key-based: it never starts Claude Code itself.
+    if (classifier.kind === "claude-code") {
+      throw new RouteFailure("MISSING_KEYS", "Add GEMINI_API_KEY or ANTHROPIC_API_KEY to .env.local on the server, then restart the app.", 503, "configuration");
+    }
     const classification = classifier.vendor === "gemini"
       ? await classify(prompt, classifier.key)
       : await classifyWithClaude(prompt, classifier.key);

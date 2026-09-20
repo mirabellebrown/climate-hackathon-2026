@@ -76,22 +76,27 @@ describe("bring-your-own-key handling", () => {
   });
   it("routes and answers with whichever single vendor has a key", () => {
     const gemini = pickVendors({ gemini: GEMINI_KEY, geminiFromEnv: false, anthropicFromEnv: false }, "hosted");
-    expect(gemini.classifier.vendor).toBe("gemini");
+    expect(gemini.classifier).toMatchObject({ kind: "api", vendor: "gemini" });
     expect(gemini.answerer).toMatchObject({ kind: "api", vendor: "gemini" });
     const anthropic = pickVendors({ anthropic: ANTHROPIC_KEY, geminiFromEnv: false, anthropicFromEnv: false }, "hosted");
-    expect(anthropic.classifier.vendor).toBe("anthropic");
+    expect(anthropic.classifier).toMatchObject({ kind: "api", vendor: "anthropic" });
     expect(anthropic.answerer).toMatchObject({ kind: "api", vendor: "anthropic" });
   });
   it("prefers the cheap Gemini classifier and Claude answers when both keys are present", () => {
     const both = pickVendors({ gemini: GEMINI_KEY, anthropic: ANTHROPIC_KEY, geminiFromEnv: false, anthropicFromEnv: false }, "hosted");
-    expect(both.classifier.vendor).toBe("gemini");
+    expect(both.classifier).toMatchObject({ kind: "api", vendor: "gemini" });
     expect(both.answerer).toMatchObject({ kind: "api", vendor: "anthropic" });
   });
   it("keeps local Claude Code answers when only a Gemini key is present locally", () => {
     expect(pickVendors({ gemini: GEMINI_KEY, geminiFromEnv: false, anthropicFromEnv: false }, "local").answerer).toEqual({ kind: "claude-code" });
   });
-  it("asks for a key when there is none", () => {
+  it("asks a hosted visitor for a key when there is none", () => {
     expect(() => pickVendors({ geminiFromEnv: false, anthropicFromEnv: false }, "hosted")).toThrow(/Gemini or Anthropic API key/);
+  });
+  it("routes and answers on Claude Code alone when running locally with no key", () => {
+    const none = pickVendors({ geminiFromEnv: false, anthropicFromEnv: false }, "local");
+    expect(none.classifier).toEqual({ kind: "claude-code" });
+    expect(none.answerer).toEqual({ kind: "claude-code" });
   });
 });
 

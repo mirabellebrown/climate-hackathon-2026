@@ -72,10 +72,47 @@ vercel --prod          # promote
 
 Notes:
 
-- **Claude Code cannot run on a server.** It needs the user's own machine and sign-in, so a deployment answers through the API instead. Run the app locally to keep using your Claude Code subscription.
+- **Claude Code cannot run on a server.** It needs the user's own machine and sign-in, so a deployment answers through the API instead — or through the visitor's own Claude Code, paired as below.
 - **Setting `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` in Vercel** makes the site answer for everyone who can reach it, on your billing. Leave both unset unless the deployment is protected.
 - **Function timeout:** `maxDuration` is 60s, Vercel's Hobby ceiling. Long heavy-model answers may need a paid plan or the local app.
 - **ESG records are ephemeral** on Vercel: the filesystem is read-only apart from the temp dir, so anything posted to `/api/v1/esg/records` disappears when the instance recycles. The sample dataset is unaffected.
+
+## Use your own Claude Code from the deployed site
+
+A visitor can skip API keys entirely and have the deployed page answer through the Claude Code
+on **their own machine**. Nothing runs on anyone else's computer: the browser talks over
+loopback to a copy of this app that the same person started.
+
+On your machine, in a clone of this repo:
+
+```sh
+npm run pair                                   # pairs with the default deployment
+npm run pair -- --origin https://your.site     # or another deployment
+```
+
+It prints a code like `http://127.0.0.1:3000#<token>`. Open the site, choose **API keys →
+Use your own Claude Code**, paste the code, and press Connect. Your browser then asks whether
+the site may reach your local network; allow it. Prompts and answers go straight from your
+browser to your machine — the deployment never sees them, and you need no API key, because
+your Claude Code both routes and answers.
+
+How it is kept safe:
+
+- The local app accepts a cross-origin request **only** from the origin it was paired with,
+  **and** only when the request carries the token `npm run pair` generated. The token is new
+  every run and dies with the process.
+- A pairing code is only accepted by the browser if it points at loopback, so a code someone
+  else planted cannot aim your prompts at their machine.
+- Chat still runs Claude Code with tools off, in an empty directory, so a web page can never
+  read your files or run commands.
+- A key in your own `.env.local` still wins for routing, because that is what you configured.
+  If that key is stale the paired chat fails at the classification step; clear it, or fix it,
+  to let Claude Code route as well as answer.
+- Browsers guard this deliberately. Chrome 153 blocks a public site from reaching loopback
+  until the person grants **Local Network Access**; the request never leaves the browser
+  otherwise. We also send `Access-Control-Allow-Private-Network` for older Chrome, which
+  gated the same thing on a preflight header. Safari and Firefox have not shipped the
+  permission, so pairing may simply fail there — run the app locally instead.
 
 ## Architecture
 

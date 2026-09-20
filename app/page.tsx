@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CircleAlert, Copy, GitBranch, KeyRound, Leaf, LoaderCircle, Plus, RotateCcw, Scale, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, Copy, GitBranch, KeyRound, Laptop, Leaf, LoaderCircle, Plus, RotateCcw, Scale, Sparkles, Unplug, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MAX_PROMPT_LENGTH } from "@/lib/config";
@@ -10,6 +10,7 @@ import { number, percent, tokens } from "@/lib/format";
 import { SavingsGauge } from "@/components/savings-gauge";
 import { SessionSavingsEmojis } from "@/components/session-savings-emojis";
 import { buildDemoTurns, DEMO_TURN_COUNT } from "@/lib/demo-seed";
+import { bridgeHeaders, checkBridge, getBridgeSnapshot, getServerBridgeSnapshot, parseConnectCode, saveBridge, subscribeBridge, type Bridge } from "@/lib/bridge-client";
 import { EMPTY_KEYS, getKeysSnapshot, getServerKeysSnapshot, keyHeaders, maskKey, saveKeys, subscribeKeys, type ApiKeys } from "@/lib/keys-client";
 import { recordResults, resetSession } from "@/lib/session";
 import type { ChatReply, DashboardState, RouteError, RouteResult } from "@/lib/types";
@@ -27,19 +28,55 @@ type Turn = { id: string; prompt: string; reply?: { answer: string; result: Rout
 let nextId = 0;
 const uid = () => `t${++nextId}`;
 
-function SiteHeader({ onKeys, keysNeeded }: { onKeys: () => void; keysNeeded: boolean }) {
+function SiteHeader({ onKeys, keysNeeded, bridged }: { onKeys: () => void; keysNeeded: boolean; bridged: boolean }) {
   return <header className="site-header">
     <Link className="brand" href="/" aria-label="GreenRoute home"><span className="brand-symbol"><Leaf size={22} strokeWidth={1.7} /></span>GreenRoute</Link>
     <div className="header-actions">
-      <span className="header-pill"><span />Carbon-aware AI</span>
+      <span className="header-pill"><span />{bridged ? "Your own Claude Code" : "Carbon-aware AI"}</span>
       <button type="button" className="impact-toggle" onClick={onKeys} data-testid="open-keys"><KeyRound size={15} />{keysNeeded ? "Add API keys" : "API keys"}</button>
       <Link className="impact-toggle" href="/reports/esg"><Scale size={15} />Impact</Link>
     </div>
   </header>;
 }
 
+/** Connect this page to the copy of Canopy running on the visitor's own machine. */
+function BridgeSection({ bridge }: { bridge: Bridge | null }) {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function connect() {
+    const parsed = parseConnectCode(code);
+    if (!parsed) { setStatus("That doesn’t look like a pairing code — it starts with http://127.0.0.1."); return; }
+    setBusy(true);
+    const problem = await checkBridge(parsed);
+    setBusy(false);
+    if (problem) { setStatus(problem); return; }
+    saveBridge(parsed);
+    setCode("");
+    setStatus("Connected. Answers now come from the Claude Code on your machine.");
+  }
+
+  return <div className="bridge-section">
+    <h3><Laptop size={15} />Or use your own Claude Code</h3>
+    {bridge
+      ? <p className="bridge-live" data-testid="bridge-connected">Connected to <code>{bridge.url}</code>. Prompts go straight from this browser to your machine — this server never sees them.
+          <button type="button" className="link-button" onClick={() => { saveBridge(null); setStatus("Disconnected."); }} data-testid="disconnect-bridge"><Unplug size={13} />Disconnect</button></p>
+      : <p className="keys-lede">Run <code>npm run pair</code> in your own copy of this app, then paste the code it prints. Your prompts never touch this server, and you need no API key at all.</p>}
+    <label className="keys-field">
+      <span>Pairing code <em>· from `npm run pair` on your machine</em></span>
+      <input type="text" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} placeholder="http://127.0.0.1:3000#…" data-testid="bridge-code" />
+      <small>Your browser will ask to let this site reach your local network. That prompt is the browser checking with you; allow it to finish connecting.</small>
+    </label>
+    <div className="keys-actions">
+      <button type="button" className="submit-button" onClick={connect} disabled={busy || !code.trim()} data-testid="connect-bridge">{busy ? <><LoaderCircle className="spin" size={15} />Connecting…</> : "Connect"}</button>
+      {status && <span className="keys-saved" role="status">{status}</span>}
+    </div>
+  </div>;
+}
+
 /** Keys stay in this browser; the server uses them per request and never stores them. */
-function KeysPanel({ keys, serverKeys, onClose }: { keys: ApiKeys; serverKeys: { gemini: boolean; anthropic: boolean }; onClose: () => void }) {
+function KeysPanel({ keys, serverKeys, bridge, onClose }: { keys: ApiKeys; serverKeys: { gemini: boolean; anthropic: boolean }; bridge: Bridge | null; onClose: () => void }) {
   const [draft, setDraft] = useState(keys);
   const [saved, setSaved] = useState<string | null>(null);
   return <div className="keys-backdrop" role="dialog" aria-modal="true" aria-labelledby="keys-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -64,6 +101,7 @@ function KeysPanel({ keys, serverKeys, onClose }: { keys: ApiKeys; serverKeys: {
         <button type="button" className="new-chat-button" onClick={() => { saveKeys(EMPTY_KEYS); setDraft(EMPTY_KEYS); setSaved("Cleared from this browser."); }}>Clear</button>
         {saved && <span className="keys-saved" role="status">{saved}</span>}
       </div>
+      <BridgeSection bridge={bridge} />
     </div>
   </div>;
 }
@@ -91,6 +129,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [server, setServer] = useState<Pick<DashboardState, "mode" | "serverKeys"> | null>(null);
   const keys = useSyncExternalStore(subscribeKeys, getKeysSnapshot, getServerKeysSnapshot);
+  const bridge = useSyncExternalStore(subscribeBridge, getBridgeSnapshot, getServerBridgeSnapshot);
   const [keysOpen, setKeysOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -102,7 +141,10 @@ export default function Home() {
   // when only a Gemini key is present.
   const hasGemini = !!server?.serverKeys.gemini || !!keys.gemini.trim();
   const hasAnthropic = !!server?.serverKeys.anthropic || !!keys.anthropic.trim();
-  const keysNeeded = !!server && !hasGemini && !hasAnthropic;
+  // A paired machine needs no key: the Claude Code there both routes and answers.
+  const keysNeeded = !!server && !hasGemini && !hasAnthropic && !bridge;
+  // Claude Code keeps the thread itself with --resume, so only API answers need history.
+  const usesClaudeCode = (!!bridge || server?.mode === "local") && !keys.anthropic.trim();
   const canSubmit = prompt.trim().length > 0 && prompt.length <= MAX_PROMPT_LENGTH && !loading && !keysNeeded;
 
   // Totals also count runs started from the terminal launcher; dedupe is by routing ID.
@@ -140,12 +182,12 @@ export default function Home() {
     setPending(next);
     setPrompt("");
     try {
-      const history = server?.mode === "hosted" || keys.anthropic.trim()
-        ? turns.flatMap((turn) => turn.reply ? [{ role: "user" as const, content: turn.prompt }, { role: "assistant" as const, content: turn.reply.answer }] : [])
-        : undefined;
-      const response = await fetch("/api/chat", {
+      const history = usesClaudeCode
+        ? undefined
+        : turns.flatMap((turn) => turn.reply ? [{ role: "user" as const, content: turn.prompt }, { role: "assistant" as const, content: turn.reply.answer }] : []);
+      const response = await fetch(bridge ? `${bridge.url}/api/chat` : "/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...keyHeaders(keys) },
+        headers: { "Content-Type": "application/json", ...keyHeaders(keys), ...(bridge ? bridgeHeaders(bridge) : {}) },
         body: JSON.stringify({ prompt: next, ...(sessionId ? { sessionId } : {}), ...(history?.length ? { history } : {}) }),
       });
       const data: ChatReply | RouteError = await response.json();
@@ -158,7 +200,10 @@ export default function Home() {
         setTurns((current) => [...current, { id: uid(), prompt: next, reply: { answer: data.answer, result: data.result } }]);
       }
     } catch {
-      setTurns((current) => [...current, { id: uid(), prompt: next, error: { code: "NETWORK_ERROR", message: "We couldn’t reach the local server. Is it still running?", stage: "request" } }]);
+      const message = bridge
+        ? "We couldn’t reach the Canopy running on your machine. Check it is still running, and that you allowed this site to reach your local network."
+        : "We couldn’t reach the local server. Is it still running?";
+      setTurns((current) => [...current, { id: uid(), prompt: next, error: { code: "NETWORK_ERROR", message, stage: "request" } }]);
     } finally {
       setPending(null);
       setLoading(false);
@@ -205,17 +250,19 @@ export default function Home() {
 
   return <>
     <a className="skip-link" href="#prompt">Skip to prompt</a>
-    <SiteHeader onKeys={() => setKeysOpen(true)} keysNeeded={keysNeeded} />
-    {keysOpen && <KeysPanel keys={keys} serverKeys={server?.serverKeys ?? { gemini: false, anthropic: false }} onClose={() => setKeysOpen(false)} />}
+    <SiteHeader onKeys={() => setKeysOpen(true)} keysNeeded={keysNeeded} bridged={!!bridge} />
+    {keysOpen && <KeysPanel keys={keys} serverKeys={server?.serverKeys ?? { gemini: false, anthropic: false }} bridge={bridge} onClose={() => setKeysOpen(false)} />}
     <main className={`chat-page ${empty ? "is-empty" : "is-active"}`}>
       {empty ? <section className="chat-welcome" aria-labelledby="welcome-title">
         <p className="eyebrow hero-eyebrow"><span /> LESS IS A LITTLE MORE.</p>
         <h1 id="welcome-title">What’s on your mind?</h1>
-        <p className="hero-description">{server?.mode === "hosted"
-          ? "Ask anything for your team. We’ll route each prompt to the smallest suitable model on your own API key. Efficiency sits above Send; Impact opens the ESG report."
-          : "Ask anything for your team. We’ll pick Haiku, Sonnet, or Opus and answer with your own Claude Code. Efficiency sits above Send; Impact opens the ESG report."}</p>
+        <p className="hero-description">{bridge
+          ? "Ask anything for your team. We’ll pick Haiku, Sonnet, or Opus and answer with the Claude Code on your own machine — this server never sees the conversation."
+          : server?.mode === "hosted"
+            ? "Ask anything for your team. We’ll route each prompt to the smallest suitable model on your own API key. Efficiency sits above Send; Impact opens the ESG report."
+            : "Ask anything for your team. We’ll pick Haiku, Sonnet, or Opus and answer with your own Claude Code. Efficiency sits above Send; Impact opens the ESG report."}</p>
         <div className="welcome-composer">
-          {keysNeeded && <p className="fallback-note" data-testid="keys-needed">This app runs on your own API key. Add a Gemini <em>or</em> an Anthropic key — whichever you add routes prompts with its small model and answers with its bigger ones. <button type="button" className="link-button" onClick={() => setKeysOpen(true)}>Add a key</button> — or try <button type="button" className="link-button" onClick={loadDemo}>the demo conversation</button>, which needs no key.</p>}
+          {keysNeeded && <p className="fallback-note" data-testid="keys-needed">This app runs on your own API key. Add a Gemini <em>or</em> an Anthropic key — whichever you add routes prompts with its small model and answers with its bigger ones. <button type="button" className="link-button" onClick={() => setKeysOpen(true)}>Add a key</button>, <button type="button" className="link-button" onClick={() => setKeysOpen(true)}>connect your own Claude Code</button>, or try <button type="button" className="link-button" onClick={loadDemo}>the demo conversation</button>, which needs no key.</p>}
           {composer}
           {examples("examples")}
           <div className="demo-seed-row">{demoButton(`Load demo data (${DEMO_TURN_COUNT} turns)`)}</div>

@@ -60,22 +60,24 @@ export function requireAnthropic(keys: Keys): string {
 }
 
 export type Answerer = { kind: "claude-code" } | { kind: "api"; vendor: import("./config").Vendor; key: string };
+export type Classifier = { kind: "claude-code" } | { kind: "api"; vendor: import("./config").Vendor; key: string };
 
 /**
  * Who classifies and who answers, from the keys at hand.
  * One key is enough: that vendor's small model routes and its bigger models answer.
- * Locally, with no Anthropic key, answers still come from the user's own Claude Code.
+ * Locally, the user's own Claude Code answers unless they brought an Anthropic key, and with
+ * no key at all it routes as well — so a paired visitor needs nothing but Claude Code.
  */
-export function pickVendors(keys: Keys, runMode: Mode = mode()): { classifier: { vendor: import("./config").Vendor; key: string }; answerer: Answerer } {
-  const classifier = keys.gemini
-    ? { vendor: "gemini" as const, key: keys.gemini }
+export function pickVendors(keys: Keys, runMode: Mode = mode()): { classifier: Classifier; answerer: Answerer } {
+  const classifier: Classifier | null = keys.gemini
+    ? { kind: "api", vendor: "gemini", key: keys.gemini }
     : keys.anthropic
-      ? { vendor: "anthropic" as const, key: keys.anthropic }
-      : null;
+      ? { kind: "api", vendor: "anthropic", key: keys.anthropic }
+      : runMode === "local"
+        ? { kind: "claude-code" }
+        : null;
   if (!classifier) {
-    throw new RouteFailure("MISSING_KEYS", runMode === "hosted"
-      ? "Add your own Gemini or Anthropic API key in Settings. Whichever you add routes prompts and answers them; the key stays in your browser."
-      : "Add GEMINI_API_KEY or ANTHROPIC_API_KEY to .env.local on the server, then restart the app.", 503, "configuration");
+    throw new RouteFailure("MISSING_KEYS", "Add your own Gemini or Anthropic API key in Settings. Whichever you add routes prompts and answers them; the key stays in your browser.", 503, "configuration");
   }
   const answerer: Answerer = keys.anthropic
     ? { kind: "api", vendor: "anthropic", key: keys.anthropic }
