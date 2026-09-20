@@ -1,10 +1,11 @@
 import { createDecision } from "@/lib/activity";
-import { classify } from "@/lib/classify";
+import { classify, classifyWithClaude } from "@/lib/classify";
 import { BASELINE_MODEL, MODELS } from "@/lib/config";
 import { FACTORS } from "@/lib/factors";
 import { energyForTokens, footprintFromEnergy } from "@/lib/impact";
 import { errorResponse, NO_STORE, requireLocalRequest } from "@/lib/local-api";
-import { readPrompt, requireKeys } from "@/lib/request";
+import { keysFor, pickVendors } from "@/lib/keys";
+import { readPrompt } from "@/lib/request";
 import type { RoutingDecision } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -17,8 +18,10 @@ export async function POST(request: Request): Promise<Response> {
   try {
     requireLocalRequest(request);
     const prompt = await readPrompt(request);
-    requireKeys(["GEMINI_API_KEY"]);
-    const classification = await classify(prompt);
+    const { classifier } = pickVendors(keysFor(request));
+    const classification = classifier.vendor === "gemini"
+      ? await classify(prompt, classifier.key)
+      : await classifyWithClaude(prompt, classifier.key);
     const decision: RoutingDecision = createDecision({
       routing: {
         tier: classification.tier, reason: classification.reason,

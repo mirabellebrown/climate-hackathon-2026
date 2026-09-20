@@ -46,11 +46,30 @@ export function calculateImpact(tier: Tier, generationUsage: TokenUsage, classif
   };
 }
 
+/**
+ * Model family to energy tier. The Gemini rows apply the same light/medium/heavy scales as
+ * the Claude rows: an assumption, not a measurement, and the same one feat/claude-api-router
+ * uses so both branches report comparable figures. See METHODOLOGY.md.
+ */
 export function tierForModel(model: string): Tier | null {
   if (/^claude-haiku-/.test(model)) return "light";
   if (/^claude-sonnet-/.test(model)) return "medium";
   if (/^claude-opus-/.test(model)) return "heavy";
+  if (/^gemini-[\d.]+-flash-lite/.test(model)) return "light";
+  if (/^gemini-[\d.]+-flash/.test(model)) return "medium";
+  if (/^gemini-[\d.]+-pro/.test(model)) return "heavy";
   return null;
+}
+
+/**
+ * Classifier scale. Flash Lite keeps the 0.25 assumption; a Claude Haiku classifier is a
+ * light-tier model, so it is priced at the light scale rather than the cheaper Flash Lite one.
+ */
+export function classifierScale(model?: string): number {
+  if (!model) return FACTORS.scale.classifier;
+  if (/flash-lite/.test(model)) return FACTORS.scale.classifier;
+  const tier = tierForModel(model);
+  return tier ? FACTORS.scale[tier] : FACTORS.scale.classifier;
 }
 
 export function totalModelTokens(models: ModelUsage[]): TokenUsage {
@@ -60,7 +79,7 @@ export function totalModelTokens(models: ModelUsage[]): TokenUsage {
   }), { inputTokens: 0, outputTokens: 0 });
 }
 
-export function calculateObservedImpact(models: ModelUsage[], classifierUsage: TokenUsage): Impact {
+export function calculateObservedImpact(models: ModelUsage[], classifierUsage: TokenUsage, classifierModel?: string): Impact {
   if (!models.length) throw new Error("Model usage is required.");
   const generationWh = models.reduce((sum, model) => {
     const tier = tierForModel(model.model);
@@ -68,7 +87,7 @@ export function calculateObservedImpact(models: ModelUsage[], classifierUsage: T
     if (![model.inputTokens, model.outputTokens, model.cacheReadInputTokens, model.cacheCreationInputTokens].every(validTokenCount)) throw new Error("Invalid model usage.");
     return sum + energyForTokens(totalModelTokens([model]), FACTORS.scale[tier]);
   }, 0);
-  const classifier = footprintFromEnergy(energyForTokens(classifierUsage, FACTORS.scale.classifier));
+  const classifier = footprintFromEnergy(energyForTokens(classifierUsage, classifierScale(classifierModel)));
   const routed = footprintFromEnergy(generationWh + classifier.energyWh);
   const baseline = footprintFromEnergy(energyForTokens(totalModelTokens(models), FACTORS.scale.heavy));
   const savedWh = baseline.energyWh - routed.energyWh;

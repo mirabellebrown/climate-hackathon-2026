@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sampleRecords } from "./sample";
 import { classify, parseOverride, parseRecord } from "./validate";
@@ -8,7 +9,8 @@ import type { EsgRecord, EsgSettings, RevenueEntry, SupplierOverride } from "./t
 
 // Append-only local storage. Records are immutable once written; rollups are always
 // recomputed from them, so a factor change never rewrites a published figure.
-const dir = () => process.env.CANOPY_ESG_DIR || join(process.cwd(), ".canopy", "esg");
+// Deployments have a read-only filesystem apart from the temp dir; records there are ephemeral.
+const dir = () => process.env.CANOPY_ESG_DIR || (process.env.VERCEL ? join(tmpdir(), "canopy-esg") : join(process.cwd(), ".canopy", "esg"));
 const file = (name: string) => join(dir(), name);
 const DEFAULT_SETTINGS: EsgSettings = { fiscal_year_start_month: 1, revenue: [], overrides: [] };
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { RouteFailure } from "./errors";
+import { mode } from "./keys";
 
 export const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -11,7 +12,8 @@ export function requireLocalRequest(request: Request) {
   const host = request.headers.get("host") ?? new URL(request.url).host;
   let hostname: string;
   try { hostname = new URL(`http://${host}`).hostname; } catch { hostname = ""; }
-  if (!LOCAL_HOSTS.includes(hostname)) throw new RouteFailure("LOCAL_ONLY", "Canopy runs on your own computer. Use its localhost address.", 403, "request");
+  // Deployed, the app is reached over the public hostname; the same-origin check below still applies.
+  if (mode() === "local" && !LOCAL_HOSTS.includes(hostname)) throw new RouteFailure("LOCAL_ONLY", "This app runs on your own computer. Use its localhost address.", 403, "request");
   const origin = request.headers.get("origin");
   if (!origin) return;
   let originHost: string;

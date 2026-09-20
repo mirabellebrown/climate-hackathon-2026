@@ -64,7 +64,7 @@ export function finishRun(id: string, models: ModelUsage[], durationMs: number):
   const result: RouteResult = {
     id, createdAt: entry.decision.createdAt, completedAt: new Date().toISOString(), routing: entry.decision.routing,
     usage: { classifier, generation, models, total: { inputTokens: generation.inputTokens + classifier.inputTokens, outputTokens: generation.outputTokens + classifier.outputTokens } },
-    impact: calculateObservedImpact(models, classifier), durationMs,
+    impact: calculateObservedImpact(models, classifier, entry.decision.routing.classifierModel), durationMs,
     modelMismatch: models.some((model) => !model.model.startsWith(entry.decision.routing.model)),
   };
   entry.activity = { ...entry.activity, status: "completed", result };
