@@ -50,6 +50,33 @@ The answer prints to stdout; Canopy's routing and impact notes print to stderr, 
 
 **Cost.** Runs count against your own Claude Code plan or API billing, exactly as if you ran `claude -p` yourself. Check your plan's terms for programmatic use.
 
+## Deploy (Vercel, bring your own key)
+
+The deployed app ships **no keys**. Each visitor adds their own in **API keys** in the header; the key is saved in their browser, sent with their own requests, and used for that request only. The server never stores or logs it, and it never reaches the activity store, the ESG report or an error message.
+
+One key is enough:
+
+| Visitor has | Routes with | Answers with | Compared against |
+| --- | --- | --- | --- |
+| Gemini key | Gemini 3.1 Flash Lite | Gemini Flash Lite / Flash / Pro | always Gemini Pro |
+| Anthropic key | Claude Haiku 4.5 | Claude Haiku / Sonnet / Opus | always Claude Opus 5 |
+| Both | Gemini Flash Lite (cheapest) | Claude Haiku / Sonnet / Opus | always Claude Opus 5 |
+
+The **Load demo data** button and the whole ESG report work with no key at all.
+
+```sh
+npm i -g vercel        # once
+vercel                 # link the project and deploy a preview
+vercel --prod          # promote
+```
+
+Notes:
+
+- **Claude Code cannot run on a server.** It needs the user's own machine and sign-in, so a deployment answers through the API instead. Run the app locally to keep using your Claude Code subscription.
+- **Setting `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` in Vercel** makes the site answer for everyone who can reach it, on your billing. Leave both unset unless the deployment is protected.
+- **Function timeout:** `maxDuration` is 60s, Vercel's Hobby ceiling. Long heavy-model answers may need a paid plan or the local app.
+- **ESG records are ephemeral** on Vercel: the filesystem is read-only apart from the temp dir, so anything posted to `/api/v1/esg/records` disappears when the instance recycles. The sample dataset is unaffected.
+
 ## Architecture
 
 ```mermaid

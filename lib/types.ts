@@ -70,6 +70,8 @@ export interface RouteResult {
 export interface ChatReply {
   answer: string;
   sessionId: string | null;
+  /** Which vendor answered: "Claude" or "Gemini". */
+  vendor?: string;
   result: RouteResult;
 }
 
@@ -84,6 +86,8 @@ export interface Activity {
 
 export interface DashboardState {
   configured: boolean;
+  mode: "local" | "hosted";
+  serverKeys: { gemini: boolean; anthropic: boolean };
   activities: Activity[];
 }
 

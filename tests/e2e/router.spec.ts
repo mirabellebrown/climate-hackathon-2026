@@ -23,7 +23,7 @@ function reply(tier: Tier, answer = ANSWER): ChatReply { return { answer, sessio
 async function mock(page: Page, respond: (body: { prompt: string; sessionId?: string }) => ChatReply | { status: number; json: unknown } | Promise<ChatReply>) {
   const seen: RouteResult[] = [];
   const bodies: { prompt: string; sessionId?: string }[] = [];
-  await page.route("**/api/session", (route) => route.fulfill({ json: { configured: true, activities: seen.map((r) => ({ id: r.id, createdAt: r.createdAt, routing: r.routing, status: "completed", result: r })) } satisfies DashboardState }));
+  await page.route("**/api/session", (route) => route.fulfill({ json: { configured: true, mode: "local" as const, serverKeys: { gemini: true, anthropic: false }, activities: seen.map((r) => ({ id: r.id, createdAt: r.createdAt, routing: r.routing, status: "completed", result: r })) } satisfies DashboardState }));
   await page.route("**/api/chat", async (route) => {
     const body = route.request().postDataJSON();
     bodies.push(body);
@@ -158,22 +158,22 @@ test("storage failures keep the chat usable", async ({ page }) => {
   await expect(gauge(page)).toContainText("· 1 answer");
 });
 
-test("real HTTP endpoints validate input, need only Gemini, and stay local", async ({ request }) => {
+test("real HTTP endpoints validate input, need a key, and stay local", async ({ request }) => {
   for (const path of ["/api/route", "/api/chat"]) {
     const missing = await request.post(path, { data: { prompt: "Hello" } });
     expect(missing.status()).toBe(503);
-    expect((await missing.json()).error.message).toContain("GEMINI_API_KEY");
+    expect((await missing.json()).error.message).toMatch(/GEMINI_API_KEY or ANTHROPIC_API_KEY/);
     expect((await (await request.post(path, { data: { prompt: " " } })).json()).error.code).toBe("INVALID_PROMPT");
     expect((await request.post(path, { data: { prompt: "Hello" }, headers: { Origin: "http://evil.example" } })).status()).toBe(403);
   }
   expect((await request.post("/api/chat", { data: { prompt: "Hello", sessionId: "bad" } })).status()).toBe(400);
-  expect(await (await request.get("/api/session")).json()).toEqual({ configured: false, activities: [] });
+  expect(await (await request.get("/api/session")).json()).toEqual({ configured: false, mode: "local", serverKeys: { gemini: false, anthropic: false }, activities: [] });
 });
 
 test("loads demo data without calling a model, and fills the gauge and emoji strip", async ({ page }) => {
   let calls = 0;
   await page.route("**/api/chat", (route) => { calls += 1; return route.abort(); });
-  await page.route("**/api/session", (route) => route.fulfill({ json: { configured: true, activities: [] } }));
+  await page.route("**/api/session", (route) => route.fulfill({ json: { configured: true, mode: "local", serverKeys: { gemini: true, anthropic: false }, activities: [] } }));
   await page.goto("/");
   await expect(page.getByTestId("session-savings-emojis-empty")).toBeVisible();
   await page.getByTestId("load-demo-data").click();
@@ -188,4 +188,33 @@ test("loads demo data without calling a model, and fills the gauge and emoji str
   await expect(page.locator(".user-bubble")).toHaveCount(21);
   await expect(gauge(page)).toContainText("· 21 answers");
   expect(calls).toBe(0);
+});
+
+test("hosted mode asks for a key, keeps the demo usable, and sends the key it is given", async ({ page }) => {
+  await page.route("**/api/session", (route) => route.fulfill({ json: { configured: false, mode: "hosted", serverKeys: { gemini: false, anthropic: false }, activities: [] } }));
+  const seen: (string | undefined)[] = [];
+  await page.route("**/api/chat", (route) => {
+    seen.push(route.request().headers()["x-anthropic-key"]);
+    return route.fulfill({ json: reply("light") });
+  });
+  await page.goto("/");
+  await expect(page.getByTestId("keys-needed")).toContainText("Gemini");
+  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  // The demo still works with no key at all.
+  await page.getByTestId("load-demo-data").click();
+  await expect(page.locator(".user-bubble")).toHaveCount(21);
+  await expect(page.getByRole("button", { name: "New conversation" })).toBeVisible();
+
+  await page.getByTestId("open-keys").click();
+  await page.getByTestId("anthropic-key").fill("sk-ant-test-key-123");
+  await page.getByTestId("save-keys").click();
+  await expect(page.getByText("Saved in this browser.")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByTestId("keys-needed")).toHaveCount(0);
+
+  await send(page, "Now answer this");
+  await expect(model(page)).toHaveText("Claude Haiku 4.5");
+  expect(seen).toEqual(["sk-ant-test-key-123"]);
+  // The key is never echoed into the page.
+  expect(await page.content()).not.toContain("sk-ant-test-key-123");
 });

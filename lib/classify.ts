@@ -1,6 +1,7 @@
 import "server-only";
+import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
-import { CLASSIFIER_FALLBACK_MODEL, CLASSIFIER_MODEL } from "./config";
+import { CLASSIFIER_FALLBACK_MODEL, CLASSIFIER_MODEL, VENDORS } from "./config";
 import { providerFailure, providerStatus, RouteFailure } from "./errors";
 import { validTokenCount } from "./impact";
 import type { Classification, Tier } from "./types";
@@ -26,8 +27,32 @@ export function parseClassification(text: string): { tier: Tier; reason: string 
   }
 }
 
-export async function classify(prompt: string): Promise<Classification> {
-  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+/** Claude classifier, for visitors who bring only an Anthropic key. Smallest model, JSON only. */
+export async function classifyWithClaude(prompt: string, apiKey: string): Promise<Classification> {
+  const model = VENDORS.anthropic.classifier.id;
+  const client = new Anthropic({ apiKey, maxRetries: 0, timeout: 30_000 });
+  try {
+    const response = await client.messages.create({
+      model, max_tokens: 256,
+      system: `${CLASSIFIER_INSTRUCTION}\nReply with the JSON object only, no code fence and no other text.`,
+      messages: [{ role: "user", content: prompt }],
+    });
+    if (response.stop_reason === "refusal") {
+      throw new RouteFailure("CLASSIFICATION_INCOMPLETE", "Claude could not classify this prompt. Try rephrasing it.", 502, "classification");
+    }
+    const text = response.content.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
+    const decision = parseClassification(text.replace(/^```(?:json)?|```$/g, "").trim());
+    const inputTokens = response.usage.input_tokens + (response.usage.cache_read_input_tokens ?? 0) + (response.usage.cache_creation_input_tokens ?? 0);
+    const outputTokens = response.usage.output_tokens;
+    if (!validTokenCount(inputTokens) || !validTokenCount(outputTokens)) {
+      throw new RouteFailure("MISSING_USAGE", "Claude did not report valid token usage, so impact cannot be estimated honestly.", 502, "classification");
+    }
+    return { ...decision, model, usage: { inputTokens, outputTokens }, usedFallback: false };
+  } catch (error) { throw providerFailure(error, "Claude", model); }
+}
+
+export async function classify(prompt: string, apiKey = process.env.GEMINI_API_KEY): Promise<Classification> {
+  const client = new GoogleGenAI({ apiKey });
   let model: string = CLASSIFIER_MODEL;
   const call = (selected: string) => client.models.generateContent({
     model: selected,
